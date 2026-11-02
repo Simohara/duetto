@@ -10,7 +10,7 @@
     language: want, lang: want === "system" ? "zh" : want,
     run: "idle", busy: false, connected: false, measuring: false, scanning: false, testMode: 0, transition: false,
     status: "",
-    master: 100, testVolume: 100, bufferMs: 2000, reconnect: true, theme: new URLSearchParams(location.search).get("theme") || "light",
+    master: 100, testVolume: 100, bufferMs: 2000, reconnect: true, mcp: { enabled: true, listening: true, command: 'claude mcp add duetto -- "E:\\Apps\\Duetto.exe" --mcp', last: { at: Date.now() - 120000, action: want === "en" ? "master volume 30%" : want === "ja" ? "全体音量 30%" : "总音量 30%" } }, theme: new URLSearchParams(location.search).get("theme") || "light",
     // ?nocable previews the missing-driver state.
     devices: new URLSearchParams(location.search).has("nocable") ? [] : ["CABLE Output (VB-Audio Virtual Cable)"], device: 0, mics: [want === "en" ? "Microphone (USB Audio Device)" : want === "ja" ? "マイク (USB Audio Device)" : "麦克风 (USB Audio Device)"], mic: 0,
     host: "192.168.1.31:7000", pinRequested: false, repairConfirm: false, cpu: "AMD x64 · SSE2", webview: "",
@@ -114,6 +114,7 @@
       case "setTestVolume": state.testVolume = c.value; break;
       case "setBuffer": state.bufferMs = c.value; break;
       case "setReconnect": state.reconnect = c.on; break;
+      case "setMcp": state.mcp.enabled = c.on; break;
       case "scan":
         state.scanning = true;
         setTimeout(() => {

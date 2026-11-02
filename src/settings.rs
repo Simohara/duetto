@@ -16,6 +16,8 @@ pub struct Settings {
     pub microphone: String,
     pub test_volume: u32,
     pub reconnect: bool,
+    /// Whether `Duetto.exe --mcp` may drive the window.
+    pub mcp: bool,
     /// Receiver playout buffer, 300-2000 ms.
     pub buffer_ms: u32,
     /// "light", "dark" or "system".
@@ -36,6 +38,7 @@ impl Default for Settings {
             microphone: String::new(),
             test_volume: 100,
             reconnect: false,
+            mcp: true,
             buffer_ms: 2000,
             theme: "system".into(),
             language: "system".into(),

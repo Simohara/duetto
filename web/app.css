@@ -160,10 +160,13 @@ h2 { margin: 28px 0 10px; font-size: 16px; font-weight: 700; }
 .map .tag-ink { fill: var(--badge-ink); font-size: 11px; font-weight: 700; text-anchor: middle; }
 .map .pair-label { font-size: 12px; fill: var(--muted); text-anchor: middle; }
 .map .live .wire { stroke-opacity: 0.35; }
-.map .wave { fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.map .wave-left { stroke: var(--left); }
-.map .wave-right { stroke: var(--right); }
-.map .wave-ink { stroke: var(--ink); }
+.map .wave { stroke-width: 1.1; stroke-linejoin: round; fill-opacity: .2; stroke-opacity: .8; }
+[data-theme="dark"] .map .wave { fill-opacity: .34; mix-blend-mode: plus-lighter; }
+[data-theme="dark"] .map .waves { filter: url(#wave-glow); }
+.map .wave-left { fill: var(--left); stroke: var(--left); }
+.map .wave-right { fill: var(--right); stroke: var(--right); }
+.map .wave-ink { fill: var(--ink); stroke: var(--ink); fill-opacity: .04; stroke-opacity: .22; }
+[data-theme="dark"] .map .wave-ink { fill-opacity: .16; stroke-opacity: .5; }
 
 /* speaker units */
 #units { display: grid; gap: 10px; }
@@ -209,6 +212,12 @@ h2 { margin: 28px 0 10px; font-size: 16px; font-weight: 700; }
 .stage-ch { fill: var(--badge-ink); font-size: 13px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
 .stage-name { fill: var(--muted); font-size: 13px; text-anchor: middle; }
 .stage-label { fill: var(--ink); font-size: 13px; text-anchor: middle; font-weight: 500; }
+.stage-hint { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+.stage.draggable svg { cursor: ew-resize; touch-action: none; }
+.stage.draggable #phantom { cursor: grab; }
+.stage.dragging #phantom { cursor: grabbing; }
+#phantom:focus { outline: none; }
+#phantom:focus-visible .phantom-halo { opacity: .25; }
 .phantom { fill: var(--sheet); stroke: var(--ink); stroke-width: 3; }
 .phantom-halo { fill: var(--ink); opacity: .08; }
 .checks { display: grid; gap: 8px; margin-top: 18px; }
@@ -240,6 +249,8 @@ h2 { margin: 28px 0 10px; font-size: 16px; font-weight: 700; }
 .setting b { display: block; font-weight: 500; }
 .setting span { font-size: 13px; color: var(--muted); }
 #buffer { width: 220px; }
+.mcp-cmd { display: flex; gap: 8px; margin-top: 8px; max-width: 640px; }
+.mcp-cmd input { flex: 1; min-width: 0; height: 30px; font-size: 12px; color: var(--muted); }
 .setting-value { width: 72px; text-align: right; color: var(--ink) !important; font-size: 15px !important; }
 .diag { display: grid; grid-template-columns: max-content 1fr; gap: 10px 32px; margin: 0; }
 .diag dt { color: var(--muted); }

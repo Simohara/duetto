@@ -302,6 +302,9 @@ enum Command {
     SetReconnect {
         on: bool,
     },
+    SetMcp {
+        on: bool,
+    },
     SetTheme {
         theme: String,
     },
@@ -359,6 +362,11 @@ struct App {
     connected: bool,
     measuring: bool,
     reconnect: bool,
+    /// MCP control allowed (settings) and its loopback port bound; both read by the control thread.
+    mcp: Arc<AtomicBool>,
+    mcp_listening: Arc<AtomicBool>,
+    /// Unix ms and description of the last command a model sent.
+    mcp_last: Option<(u64, String)>,
     cpu_label: String,
     webview_label: String,
     status: String,
@@ -418,6 +426,9 @@ impl App {
             connected: false,
             measuring: false,
             reconnect: false,
+            mcp: Arc::new(AtomicBool::new(true)),
+            mcp_listening: Arc::new(AtomicBool::new(false)),
+            mcp_last: None,
             cpu_label: cpu_compatibility_label(),
             webview_label: wry::webview_version()
                 .unwrap_or_else(|_| tr!("未知版本", "unknown version", "不明なバージョン")),
@@ -485,6 +496,7 @@ impl App {
         self.volume_ui = settings.playback_master();
         self.test_volume = settings.test_volume;
         self.reconnect = settings.reconnect;
+        self.mcp.store(settings.mcp, Ordering::Release);
         self.buffer_ms = settings.buffer_ms;
         self.theme = settings.theme.clone();
         self.language = settings.language.clone();
@@ -1200,6 +1212,7 @@ impl App {
                 .unwrap_or_default(),
             test_volume: self.test_volume,
             reconnect: self.reconnect,
+            mcp: self.mcp.load(Ordering::Acquire),
             buffer_ms: self.buffer_ms,
             theme: self.theme.clone(),
             language: self.language.clone(),
@@ -1624,6 +1637,7 @@ impl App {
                 self.buffer_ms = (value.clamp(300, 2000) + 25) / 50 * 50;
             }
             Command::SetReconnect { on } if !self.busy => self.reconnect = on,
+            Command::SetMcp { on } => self.mcp.store(on, Ordering::Release),
             Command::SetTheme { theme }
                 if matches!(theme.as_str(), "light" | "dark" | "system") =>
             {
@@ -1712,6 +1726,48 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// A command from the control port: runs like a page command, and the
+    /// page is told what the model did (when it took effect).
+    fn mcp_command(&mut self, body: &str) {
+        let status = self.status.clone();
+        self.command(body);
+        let v: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+        let volume = v["volume"].as_u64().unwrap_or(0) as u32;
+        let address = v["address"].as_str().unwrap_or("");
+        let action = match v["cmd"].as_str() {
+            Some("scan") => tr!("扫描音响", "scan for speakers", "スピーカーを検索"),
+            Some("start") => tr!("开始桥接", "start streaming", "ブリッジを開始"),
+            Some("stop") => tr!("停止桥接", "stop streaming", "ブリッジを停止"),
+            Some("setMaster") if v["value"].as_u64() == Some(self.volume_ui as u64) => {
+                tr!(
+                    "总音量 {}%",
+                    "master volume {}%",
+                    "全体音量 {}%",
+                    self.volume_ui
+                )
+            }
+            Some("route") if self.routes.get(address).is_some_and(|r| r.volume == volume) => tr!(
+                "「{}」音量 {volume}%",
+                "“{}” volume {volume}%",
+                "「{}」の音量 {volume}%",
+                self.name_of(address)
+            ),
+            _ => return,
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+        // Commands that report their own progress keep it.
+        if self.status == status {
+            self.status = tr!(
+                "模型通过 MCP：{action}",
+                "A model via MCP: {action}",
+                "モデルが MCP で操作：{action}"
+            );
+        }
+        self.mcp_last = Some((now, action));
     }
 
     /// Worker events, the end of a buffer transition, and saving.
@@ -1977,6 +2033,15 @@ impl App {
             "testVolume": self.test_volume,
             "bufferMs": self.buffer_ms,
             "reconnect": self.reconnect,
+            "mcp": {
+                "enabled": self.mcp.load(Ordering::Acquire),
+                "listening": self.mcp_listening.load(Ordering::Acquire),
+                "command": format!(
+                    "claude mcp add duetto -- \"{}\" --mcp",
+                    std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default()
+                ),
+                "last": self.mcp_last.as_ref().map(|(at, action)| json!({ "at": at, "action": action })),
+            },
             "theme": self.theme,
             "language": self.language,
             "lang": crate::i18n::code(crate::i18n::lang()),
@@ -2239,6 +2304,51 @@ fn show_message(text: &str) {
     }
 }
 
+/// The loopback port `Duetto.exe --mcp` drives: one JSON line in, one out.
+/// `{"cmd":"state"}` reads the last snapshot; anything else must pass
+/// `mcp::control_command` and then runs exactly like a page command.
+fn serve_control(
+    proxy: tao::event_loop::EventLoopProxy<String>,
+    snapshot: Arc<std::sync::Mutex<String>>,
+    enabled: Arc<AtomicBool>,
+    listening: Arc<AtomicBool>,
+) {
+    use std::io::{BufRead, Read, Write};
+    let address = (std::net::Ipv4Addr::LOCALHOST, crate::mcp::CONTROL_PORT);
+    let Ok(listener) = std::net::TcpListener::bind(address) else {
+        crate::diagnostics::record_error("MCP 控制端口已被占用");
+        return;
+    };
+    listening.store(true, Ordering::Release);
+    for stream in listener.incoming().flatten() {
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+        let Ok(mut writer) = stream.try_clone() else {
+            continue;
+        };
+        let mut line = String::new();
+        if std::io::BufReader::new(stream.take(4096))
+            .read_line(&mut line)
+            .is_err()
+        {
+            continue;
+        }
+        let is_state =
+            serde_json::from_str::<serde_json::Value>(&line).is_ok_and(|v| v["cmd"] == "state");
+        let reply = if !enabled.load(Ordering::Acquire) {
+            json!({ "error": "MCP control is turned off in Duetto's Settings." }).to_string()
+        } else if is_state {
+            snapshot.lock().map(|s| s.clone()).unwrap_or_default()
+        } else {
+            match crate::mcp::control_command(&line).map(|c| proxy.send_event(format!("mcp:{c}"))) {
+                Some(Ok(())) => json!({ "ok": true }).to_string(),
+                Some(Err(_)) => json!({ "error": "Duetto is closing" }).to_string(),
+                None => json!({ "error": "command not allowed" }).to_string(),
+            }
+        };
+        let _ = writeln!(writer, "{reply}");
+    }
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     use tao::{
         dpi::LogicalSize,
@@ -2272,6 +2382,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
     let event_loop = EventLoopBuilder::<String>::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    let snapshot = Arc::new(std::sync::Mutex::new(String::from("{}")));
+    {
+        let (proxy, snapshot) = (event_loop.create_proxy(), snapshot.clone());
+        let (enabled, listening) = (app.mcp.clone(), app.mcp_listening.clone());
+        thread::spawn(move || serve_control(proxy, snapshot, enabled, listening));
+    }
     let window = WindowBuilder::new()
         .with_title(app_name())
         .with_inner_size(LogicalSize::new(1180.0, 800.0))
@@ -2314,7 +2430,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         match event {
             WindowLoopEvent::UserEvent(body) => {
                 let (theme, language) = (app.theme.clone(), app.language.clone());
-                app.command(&body);
+                // Only the control thread adds the prefix; page commands are JSON.
+                match body.strip_prefix("mcp:") {
+                    Some(command) => app.mcp_command(command),
+                    None => app.command(&body),
+                }
                 if app.theme != theme {
                     window.set_theme(window_theme(&app.theme));
                 }
@@ -2336,6 +2456,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         app.tick();
         if let Some(state) = app.take_state() {
+            if let Ok(mut last) = snapshot.lock() {
+                last.clone_from(&state);
+            }
             let _ =
                 webview.evaluate_script(&format!("window.duetto && window.duetto.update({state})"));
         }
@@ -2378,6 +2501,9 @@ mod tests {
             connected: false,
             measuring: false,
             reconnect: false,
+            mcp: Arc::new(AtomicBool::new(true)),
+            mcp_listening: Arc::new(AtomicBool::new(false)),
+            mcp_last: None,
             cpu_label: "x86-64 (test fixture)".into(),
             webview_label: "test webview".into(),
             status: String::new(),
@@ -2710,6 +2836,26 @@ mod tests {
         ] {
             assert!((super::manual_test_gain(master, test) - expected).abs() < 0.00001);
         }
+    }
+    #[test]
+    fn model_commands_are_shown_only_when_they_took_effect() {
+        // The language is global to the test process, so no exact wording here.
+        let mut app = start_fixture();
+        add_test_route(&mut app, "127.0.0.1:7000", true);
+        app.mcp_command(r#"{"cmd":"setMaster","value":30}"#);
+        assert_eq!(app.volume_ui, 30);
+        assert!(app.status.contains("MCP") && app.status.contains("30%"));
+        let last = app.mcp_last.clone().unwrap().1;
+        assert!(last.contains("30%"));
+        // A refused change (a measurement is running) is not reported.
+        app.measuring = true;
+        app.status.clear();
+        app.mcp_command(r#"{"cmd":"route","address":"127.0.0.1:7000","volume":60}"#);
+        assert_eq!(app.status, "");
+        assert_eq!(app.mcp_last.as_ref().unwrap().1, last);
+        let state: serde_json::Value = serde_json::from_str(&app.state_json()).unwrap();
+        assert_eq!(state["mcp"]["enabled"], true);
+        assert!(state["mcp"]["command"].as_str().unwrap().ends_with("--mcp"));
     }
     #[test]
     fn edits_are_saved_without_waiting_for_exit() {

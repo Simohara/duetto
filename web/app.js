@@ -134,11 +134,13 @@ function enterPage(section) {
   const tl = gsap.timeline();
   const h1 = $("[data-split]", section);
   if (!h1.split) h1.split = SplitText.create(h1, { type: "chars", charsClass: "char" });
-  tl.from(h1.split.chars, { yPercent: 110, rotate: 8, autoAlpha: 0, duration: 0.6, ease: "back.out(1.8)", stagger: 0.05 })
-    .from($$("[data-enter]", section), { y: 22, autoAlpha: 0, duration: 0.6, ease: "power3.out", stagger: 0.05 }, "<0.1");
-  if (section.id === "page-speakers") tl.from($$(".unit", section), { y: 26, autoAlpha: 0, duration: 0.6, ease: "power3.out", stagger: 0.07 }, "<0.2");
-  if (section.id === "page-calibrate") tl.from($$(".checks > div", section), { x: -14, autoAlpha: 0, duration: 0.45, ease: "power2.out", stagger: 0.07 }, "<0.1");
-  if (section.id === "page-settings") tl.from($$(".setting", section), { x: 18, autoAlpha: 0, duration: 0.5, ease: "power3.out", stagger: 0.06 }, "<0.05");
+  // One tween per element: a second from() on the same block would hold it
+  // invisible and then snap it in. Long expo tails settle instead of bounce.
+  const settle = { autoAlpha: 0, ease: "expo.out", clearProps: "transform,opacity,visibility" };
+  tl.from(h1.split.chars, { ...settle, yPercent: 100, duration: 0.8, stagger: 0.035 })
+    .from($$("[data-enter]", section), { ...settle, y: 14, duration: 0.9, stagger: 0.045 }, 0.08);
+  if (section.id === "page-speakers") tl.from($$(".unit", section), { ...settle, y: 14, duration: 0.9, stagger: 0.06 }, 0.2);
+  if (section.id === "page-calibrate") tl.from($$(".checks > div", section), { ...settle, x: -10, duration: 0.8, stagger: 0.06 }, 0.2);
   return tl;
 }
 function showPage(name) {
@@ -149,7 +151,7 @@ function showPage(name) {
   $$(".nav button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
   movePill(true);
   gsap.timeline()
-    .to(from, { y: -12, autoAlpha: 0, duration: reduce ? 0 : 0.2, ease: "power2.in" })
+    .to(from, { y: -6, autoAlpha: 0, duration: reduce ? 0 : 0.18, ease: "power2.in" })
     .add(() => {
       from.hidden = true;
       gsap.set(from, { clearProps: "all" });
@@ -365,30 +367,33 @@ $("#notices").addEventListener("click", (e) => {
 });
 
 /* ---------- route map: the source splits into each pair's two channels ---------- */
-/* Live waveform: while audio comes in, every wire ripples like Siri's wave,
-   pinched at its ends, its height following the captured CABLE Output peak. */
+/* Live waveform: while audio comes in, every wire blooms into Siri's wave —
+   translucent lobes mirrored about the wire, blended where they cross, with
+   a bright spot of energy drifting along. Pinched at the ends; the height
+   follows the captured CABLE Output peak. */
 let waves = [];
 let waveLevel = 0;
+// [colour, amplitude, wavelength px, speed rad/s]
 const STRANDS = {
-  both: [["left", 1, 0.9], ["right", 0.85, 0.85], ["ink", 0.45, 0.35]],
-  left: [["left", 1, 0.95], ["left", 0.6, 0.45], ["left", 0.35, 0.3]],
-  right: [["right", 1, 0.95], ["right", 0.6, 0.45], ["right", 0.35, 0.3]],
-  ink: [["ink", 1, 0.9], ["ink", 0.6, 0.4], ["ink", 0.35, 0.25]],
+  both: [["left", 1, 150, 4.2], ["right", 0.9, 110, 5.1], ["ink", 0.55, 80, 6.3], ["left", 0.5, 200, 3.1]],
+  left: [["left", 1, 140, 4.4], ["left", 0.7, 95, 5.6], ["ink", 0.45, 70, 6.8]],
+  right: [["right", 1, 140, 4.4], ["right", 0.7, 95, 5.6], ["ink", 0.45, 70, 6.8]],
+  ink: [["ink", 1, 140, 4.4], ["ink", 0.65, 95, 5.6], ["ink", 0.4, 70, 6.8]],
 };
 function addWaves(path, tone, parent, el) {
   const length = path.getTotalLength();
-  const count = Math.max(24, Math.round(length / 5));
+  const count = Math.max(32, Math.round(length / 4));
   const points = [];
   for (let i = 0; i <= count; i++) {
     const at = (i / count) * length;
     const p = path.getPointAtLength(at), q = path.getPointAtLength(Math.min(length, at + 0.5)), b = path.getPointAtLength(Math.max(0, at - 0.5));
     const dx = q.x - b.x, dy = q.y - b.y, n = Math.hypot(dx, dy) || 1;
     // sin² envelope: zero at the source, the junction and the speaker.
-    points.push({ x: p.x, y: p.y, nx: -dy / n, ny: dx / n, s: at, env: Math.sin((Math.PI * at) / length) ** 2 });
+    points.push({ x: p.x, y: p.y, nx: -dy / n, ny: dx / n, s: at, u: at / length, env: Math.sin((Math.PI * at) / length) ** 2 });
   }
-  STRANDS[tone].forEach(([cls, amp, opacity], i) => {
-    const node = el("path", { class: `wave wave-${cls}`, "stroke-opacity": opacity }, parent);
-    waves.push({ node, points, amp, k: (2 * Math.PI) / (64 + 26 * i), speed: 3.4 + 1.3 * i, phase: i * 2.1, breathe: 0.9 + 0.35 * i });
+  STRANDS[tone].forEach(([cls, amp, wavelength, speed], i) => {
+    const node = el("path", { class: `wave wave-${cls}` }, parent);
+    waves.push({ node, points, amp, k: (2 * Math.PI) / wavelength, speed, phase: i * 2.1 + points.length * 0.37, drift: 0.45 + 0.23 * i });
   });
 }
 function tickWaves(time) {
@@ -396,15 +401,18 @@ function tickWaves(time) {
   // Peak dB to height: fast attack, slow release, silent at -54 dB and below.
   const level = S && S.inputLevel !== null && S.inputLevel !== undefined ? Math.max(0, Math.min(1, (S.inputLevel + 54) / 48)) : 0;
   waveLevel += (level - waveLevel) * (level > waveLevel ? 0.3 : 0.06);
-  const height = 11 * waveLevel ** 1.3;
+  const height = 34 * waveLevel ** 0.9;
   for (const w of waves) {
-    const swell = height * w.amp * (0.7 + 0.3 * Math.sin(time * w.breathe + w.phase));
-    let d = "";
+    const swell = height * w.amp * (0.75 + 0.25 * Math.sin(time * 1.3 * w.drift + w.phase));
+    // Where along the wire this strand is loudest right now.
+    const focus = 0.5 + 0.36 * Math.sin(time * w.drift + w.phase);
+    const top = [], bottom = [];
     for (const p of w.points) {
-      const off = swell * p.env * Math.sin(p.s * w.k - time * w.speed + w.phase);
-      d += `${d ? "L" : "M"}${(p.x + p.nx * off).toFixed(1)},${(p.y + p.ny * off).toFixed(1)}`;
+      const off = swell * p.env * (0.3 + 0.7 * Math.exp(-(((p.u - focus) / 0.22) ** 2))) * Math.sin(p.s * w.k - time * w.speed + w.phase);
+      top.push(`${(p.x + p.nx * off).toFixed(1)},${(p.y + p.ny * off).toFixed(1)}`);
+      bottom.push(`${(p.x - p.nx * off).toFixed(1)},${(p.y - p.ny * off).toFixed(1)}`);
     }
-    w.node.setAttribute("d", d);
+    w.node.setAttribute("d", `M${top.join("L")}L${bottom.reverse().join("L")}Z`);
   }
 }
 gsap.ticker.add(tickWaves);
@@ -433,8 +441,9 @@ function drawMap(animate) {
   const width = Math.max($(".map").clientWidth, 480);
   const ROW = 46, GAP = 14;
   const slots = rows.reduce((n, u) => n + (u.kind === "pair" ? 2 : 1), 0);
-  const height = Math.max(slots * ROW + Math.max(rows.length - 1, 0) * GAP + 40, 118);
-  svg.innerHTML = "";
+  const height = Math.max(slots * ROW + Math.max(rows.length - 1, 0) * GAP + 56, 140);
+  // The glow is used by the dark theme only (see app.css).
+  svg.innerHTML = '<defs><filter id="wave-glow" x="-5%" y="-40%" width="110%" height="180%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("height", height);
   svg.classList.toggle("live", live);
@@ -511,20 +520,101 @@ function drawMap(animate) {
 window.addEventListener("resize", () => S && drawMap(false));
 
 /* ---------- calibration: where the stereo image sits between the pair ---------- */
+/* The image is estimated from how far both sides' delays and trims have moved
+   from the last aligned point (the values calibration found, or the saved
+   ones); dragging it moves both delay and level live. */
 let shownResult = null;
+let resultTimeline = null;
+let calBase = null; // { key, l: { delay, trim }, r: { delay, trim } }
+let dragP = null;
+// Alone, about 1.5 ms (precedence effect) or 12 dB moves the image fully to one side.
+const TIME_FULL = 1.5, LEVEL_FULL = 12;
 const resultLabel = (r) => t(Math.abs(r.ms) <= 0.2 && Math.abs(r.db) <= 0.5 ? "phantom.centred" : "phantom.verify");
 const msText = (ms) => t(ms >= 0 ? "fig.late" : "fig.early", { v: Math.abs(ms).toFixed(2) });
-const dbText = (db) => `${db > 0 ? "+" : db < 0 ? "−" : ""}${Math.abs(db).toFixed(1)} dB`;
-function phantomX(ms) {
-  // The earlier speaker pulls the image towards itself (precedence effect);
-  // about 1.5 ms already moves it most of the way.
-  return 320 - Math.max(-1, Math.min(1, ms / 1.5)) * 200;
+const signed = (v, digits) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}`;
+const dbText = (db) => `${signed(db, 1)} dB`;
+const phantomX = (p) => 320 + p * 200;
+const calSides = () => [S.calPair.left, S.calPair.right].map((a) => S.speakers.find((s) => s.address === a));
+const calKey = () => `${S.calPair.left}|${S.calPair.right}`;
+const hasBase = () => !!(S && calBase && calBase.key === calKey() && calSides().every(Boolean));
+const canDrag = () => hasBase() && S.editable;
+function imageOffset() {
+  const [l, r] = calSides();
+  const ms = r.delay - l.delay - (calBase.r.delay - calBase.l.delay);
+  const db = r.trim - l.trim - (calBase.r.trim - calBase.l.trim);
+  // Right later pulls the image left; right louder pulls it right.
+  return { ms, db, p: Math.max(-1, Math.min(1, -ms / TIME_FULL + db / LEVEL_FULL)) };
+}
+function updateBase(fresh) {
+  const sides = S.calPair.left && S.calPair.right ? calSides() : [];
+  if (!sides.length || !sides.every(Boolean)) { calBase = null; return; }
+  if (!fresh && calBase && calBase.key === calKey()) return;
+  const [l, r] = sides;
+  calBase = { key: calKey(), l: { delay: l.delay, trim: l.trim }, r: { delay: r.delay, trim: r.trim } };
+}
+function moveImage(p) {
+  // Half the shift from time, half from level. Delay is only added and level
+  // only cut, so each side stays at or after its aligned delay and trim.
+  const ms = (-p * TIME_FULL) / 2, db = (p * LEVEL_FULL) / 2;
+  const [l, r] = calSides();
+  send("route", { address: l.address, delay: calBase.l.delay + Math.max(0, -ms), trim: calBase.l.trim - Math.max(0, db) });
+  send("route", { address: r.address, delay: calBase.r.delay + Math.max(0, ms), trim: calBase.r.trim - Math.max(0, -db) });
 }
 function placePhantom(animate) {
+  if (resultTimeline && resultTimeline.isActive()) return;
+  const draggable = canDrag();
+  const off = hasBase() ? imageOffset() : null;
+  const p = dragP ?? (off ? off.p : 0);
+  $(".stage").classList.toggle("draggable", draggable);
+  const dot = $("#phantom");
+  dot.setAttribute("tabindex", draggable ? "0" : "-1");
+  dot.setAttribute("aria-valuenow", Math.round(p * 100));
+  dot.setAttribute("aria-disabled", String(!draggable));
+  gsap.to("#phantom", { x: phantomX(p), y: 64, autoAlpha: off ? 1 : 0.35, duration: animate && dragP === null ? 0.4 : 0, ease: "power3.out", overwrite: "auto" });
+  const moved = off && (dragP !== null || Math.abs(off.ms) >= 0.05 || Math.abs(off.db) >= 0.05);
   const r = S && S.lastResult;
-  gsap.set("#phantom", { x: 320, y: 64 });
-  gsap.to("#phantom", { autoAlpha: r ? 1 : 0.35, duration: animate ? 0.4 : 0 });
-  setText($("#phantom-label"), r ? resultLabel(r) : t(S && S.calPair.left ? "phantom.waiting" : "phantom.needPair"));
+  const side = t(p > 0.02 ? "side.right" : p < -0.02 ? "side.left" : "side.centre");
+  setText($("#phantom-label"), moved ? t("phantom.offset", { side, ms: signed(off.ms, 2), db: signed(off.db, 1) })
+    : r ? resultLabel(r) : t(S && S.calPair.left ? "phantom.waiting" : "phantom.needPair"));
+  setText($("#phantom-hint"), draggable ? t("phantom.hint") : "");
+}
+{
+  const svg = $("#stage");
+  let last = 0;
+  const pointP = (e) => {
+    const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+    return Math.max(-1, Math.min(1, (point.x - 320) / 200));
+  };
+  const drag = (e, final) => {
+    dragP = pointP(e);
+    // Each delay change inserts or drops a few samples; about 20 a second is enough.
+    if (final || e.timeStamp - last > 50) { last = e.timeStamp; moveImage(dragP); }
+    placePhantom(false);
+  };
+  svg.addEventListener("pointerdown", (e) => {
+    if (!canDrag() || e.button !== 0) return;
+    svg.setPointerCapture(e.pointerId);
+    $(".stage").classList.add("dragging");
+    $("#phantom").focus();
+    drag(e, false);
+  });
+  svg.addEventListener("pointermove", (e) => { if (dragP !== null) drag(e, false); });
+  const end = (e) => {
+    if (dragP === null) return;
+    drag(e, true);
+    dragP = null;
+    $(".stage").classList.remove("dragging");
+  };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+  svg.addEventListener("dblclick", () => { if (canDrag()) moveImage(0); });
+  $("#phantom").addEventListener("keydown", (e) => {
+    if (!canDrag()) return;
+    const step = e.key === "ArrowLeft" ? -0.05 : e.key === "ArrowRight" ? 0.05 : null;
+    if (step === null && e.key !== "Home") return;
+    e.preventDefault();
+    moveImage(step === null ? 0 : Math.max(-1, Math.min(1, imageOffset().p + step)));
+  });
 }
 function showResult(r) {
   const ms = $("#fig-ms"), db = $("#fig-db");
@@ -533,13 +623,13 @@ function showResult(r) {
     ms.textContent = t(r.ms >= 0 ? "fig.late" : "fig.early", { v: Math.abs(shown.ms).toFixed(2) });
     db.textContent = dbText(shown.db);
   };
-  if (reduce) { shown.ms = r.ms; shown.db = r.db; write(); return; }
+  if (reduce) { shown.ms = r.ms; shown.db = r.db; write(); placePhantom(false); return; }
   gsap.to(shown, { ms: r.ms, db: r.db, duration: 1.2, ease: "power3.out", onUpdate: write });
   gsap.from([ms, db], { y: 14, scale: 0.92, duration: 0.7, ease: "back.out(2)", stagger: 0.1 });
   // Show where the image was, then let it settle in the centre the trims create.
-  const before = phantomX(r.ms);
+  const before = phantomX(Math.max(-1, Math.min(1, -r.ms / TIME_FULL)));
   const side = t(r.ms > 0.05 ? "side.left" : r.ms < -0.05 ? "side.right" : "side.centre");
-  gsap.timeline()
+  resultTimeline = gsap.timeline({ onComplete: () => placePhantom(false) })
     .set("#phantom", { autoAlpha: 1 })
     .add(() => setText($("#phantom-label"), t("phantom.before", { side })))
     .to("#phantom", { x: before, duration: 0.7, ease: "power3.out" })
@@ -590,14 +680,17 @@ function renderCalibrate(first) {
     }
   }
   const result = JSON.stringify(S.lastResult);
+  // A new measurement has just applied its delays and trims: that is the new centre.
+  updateBase(result !== shownResult && !!S.lastResult);
   if (result !== shownResult) {
     const firstSight = shownResult === null;
     shownResult = result;
     if (S.lastResult && !firstSight) showResult(S.lastResult);
-    else if (S.lastResult) { $("#fig-ms").textContent = msText(S.lastResult.ms); $("#fig-db").textContent = dbText(S.lastResult.db); placePhantom(false); }
-    else { $("#fig-ms").textContent = "—"; $("#fig-db").textContent = "—"; placePhantom(false); }
+    else if (S.lastResult) { $("#fig-ms").textContent = msText(S.lastResult.ms); $("#fig-db").textContent = dbText(S.lastResult.db); }
+    else { $("#fig-ms").textContent = "—"; $("#fig-db").textContent = "—"; }
   }
-  if (first) placePhantom(false);
+  const [l, r] = S.calPair.left ? calSides() : [];
+  if (changed("phantom", [l && [l.delay, l.trim], r && [r.delay, r.trim], S.editable, S.lastResult, LANG, calBase])) placePhantom(!first);
 }
 $("#test-toggle").addEventListener("click", () => send("toggleTest"));
 $("#measure").addEventListener("click", () => send("measure"));
@@ -707,6 +800,12 @@ function render(first = false) {
   reconnect.disabled = S.busy;
   $("#import-legacy").disabled = S.busy;
   setChecked(reconnect, S.reconnect, !first);
+  const mcp = S.mcp;
+  setChecked($("#mcp"), mcp.enabled, !first);
+  const last = mcp.last ? `${LANG === "en" ? " " : ""}${t("mcp.last", { time: new Date(mcp.last.at).toLocaleTimeString(document.documentElement.lang, { hour: "2-digit", minute: "2-digit" }), action: mcp.last.action })}` : "";
+  setText($("#mcp-desc"), !mcp.listening ? t("mcp.busy") : mcp.enabled ? t("mcp.on") + last : t("mcp.off"));
+  if ($("#mcp-command").value !== mcp.command) $("#mcp-command").value = mcp.command;
+  swapLabel($("#mcp-copy"), t(mcpCopied ? "mcp.copied" : "mcp.copy"));
   setText($("#diag-cpu"), S.cpu);
   setText($("#diag-webview"), S.webview);
 }
@@ -738,6 +837,21 @@ $("#reconnect").addEventListener("click", (e) => {
   const on = e.currentTarget.getAttribute("aria-checked") !== "true";
   setChecked(e.currentTarget, on);
   send("setReconnect", { on });
+});
+$("#mcp").addEventListener("click", (e) => {
+  const on = e.currentTarget.getAttribute("aria-checked") !== "true";
+  setChecked(e.currentTarget, on);
+  send("setMcp", { on });
+});
+let mcpCopied = false;
+$("#mcp-copy").addEventListener("click", (e) => {
+  const button = e.currentTarget, field = $("#mcp-command");
+  const done = () => {
+    mcpCopied = true; swapLabel(button, t("mcp.copied"));
+    setTimeout(() => { mcpCopied = false; swapLabel(button, t("mcp.copy")); }, 1600);
+  };
+  // Without clipboard access the command stays selected for Ctrl+C.
+  navigator.clipboard.writeText(field.value).then(done, () => { field.focus(); field.select(); });
 });
 
 /* ---------- the opening ---------- */

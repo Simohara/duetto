@@ -28,7 +28,8 @@ While playing, the input level and dropped packet count appear next to the input
 
 - Place a microphone at the listening position, start the continuous test, then press **Measure & align**.
 - In about 20 seconds Duetto measures how much later and louder the right side arrives than the left, and applies the correction immediately.
-- The marker at the top shows where the stereo image sits. It returns to the centre once the pair is aligned.
+- The marker at the top shows where the stereo image sits, estimated from how far both sides' delay and trim have moved from the last aligned point. It returns to the centre once the pair is aligned.
+- Drag the marker (or use the arrow keys) to move the image by ear: it adds delay to and cuts level from the far side live, half of the shift from each. Double-click or press Home to return to the aligned point.
 
 ### Settings
 
@@ -58,6 +59,14 @@ Changes save automatically after about a second.
 3. The first connection needs pairing. On the speaker, press **Test target**, then **Pair with PIN**, and enter the 4-digit PIN the speaker shows.
 4. Press **Start streaming** in the sidebar. The master volume scales all audio without touching any speaker's calibration.
 5. To calibrate, tick a single stereo pair. Once bridging has run for 30 seconds, measure on the Calibration page, and measure again to verify.
+
+## Model control (MCP)
+
+`airbridge-rust.exe --mcp` is a stdio MCP server that drives the open Duetto window: `status`, `connect` (scan, then start streaming to the ticked speakers), `disconnect` and `set_volume` (master, or one speaker by name or address). The window listens on `127.0.0.1:47391` and accepts only these commands; pairing, delays and channels stay in the window. **Model control (MCP)** in Settings turns it off, shows the model's last action and copies the command below. To add it to Claude Code:
+
+```
+claude mcp add duetto -- "C:\path\to\airbridge-rust.exe" --mcp
+```
 
 ## Data
 

@@ -94,8 +94,9 @@
               <text class="stage-ch" x="560" y="64" data-i18n="ch.r">右</text>
               <text class="stage-name" id="stage-l-name" x="80" y="104">—</text>
               <text class="stage-name" id="stage-r-name" x="560" y="104">—</text>
-              <g id="phantom"><circle class="phantom-halo" cx="0" cy="0" r="22"/><circle class="phantom" cx="0" cy="0" r="9"/></g>
+              <g id="phantom" role="slider" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" aria-label="声像位置" data-i18n-aria="stage.label"><circle class="phantom-halo" cx="0" cy="0" r="22"/><circle class="phantom" cx="0" cy="0" r="9"/></g>
               <text class="stage-label" id="phantom-label" x="320" y="28" data-i18n="phantom.waiting">等待测量</text>
+              <text class="stage-hint" id="phantom-hint" x="320" y="136"></text>
             </svg>
           </div>
           <div class="checks" id="checks"></div>
@@ -158,6 +159,13 @@
           <div class="setting" data-enter>
             <div><b data-i18n="reconnect">断线自动重连</b><span data-i18n="reconnect.desc">连接中断后自动重试，最多连续 10 次；配对认证失败不重试。</span></div>
             <button class="check" id="reconnect" role="checkbox" aria-checked="false" aria-label="断线自动重连" data-i18n-aria="reconnect"><svg viewBox="0 0 14 14"><path d="M3 7.5 6 10l5-6"/></svg></button>
+          </div>
+          <div class="setting" data-enter>
+            <div>
+              <b data-i18n="mcp">模型控制（MCP）</b><span id="mcp-desc"></span>
+              <div class="mcp-cmd"><input class="field num" id="mcp-command" readonly aria-label="添加到 Claude Code 的命令" data-i18n-aria="mcp.command"><button class="btn small" id="mcp-copy"><span class="label">复制命令</span></button></div>
+            </div>
+            <button class="check" id="mcp" role="checkbox" aria-checked="false" aria-label="模型控制（MCP）" data-i18n-aria="mcp"><svg viewBox="0 0 14 14"><path d="M3 7.5 6 10l5-6"/></svg></button>
           </div>
           <div class="setting" data-enter>
             <div><b data-i18n="import">导入旧版配对凭据</b><span data-i18n="import.desc">从 Python 版读取已扫描音响的 PIN 配对凭据；只在点击时导入，不会覆盖已有凭据。</span></div>

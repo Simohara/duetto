@@ -10,6 +10,7 @@ mod control_pump;
 mod diagnostics;
 mod event_pump;
 mod gui;
+mod mcp;
 mod multistream;
 mod playback_clock;
 mod pyatv_session;
@@ -50,6 +51,7 @@ fn main() {
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     match args.get(1).map(String::as_str) {
+        Some("--mcp") => mcp::serve(),
         Some("--audio-inputs") => audio_inputs(),
         Some("--scan") => scan(),
         Some("--pair") if args.len() == 3 => pair(&args[2]),
