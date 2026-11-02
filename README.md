@@ -100,6 +100,16 @@ To work on the interface without the backend, open `web/index.html` from any sta
 
 `vendor/cidermill-airplay` is a patched local copy of the protocol library and must stay in place for the build.
 
+To release, bump `version` in `Cargo.toml`, commit, then push a matching tag. GitHub Actions builds, tests and publishes `Duetto.exe` as that tag's release:
+
+```bash
+git tag v0.1.1
+```
+
+```bash
+git push origin v0.1.1
+```
+
 ## Limitations
 
 - Speakers that require a connection password are not supported. Their card shows a notice.

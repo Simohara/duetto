@@ -1,0 +1,25 @@
+name: Release
+
+# A pushed v* tag builds, tests and publishes Duetto.exe as that tag's release.
+# Run it by hand (Actions → Release → Run workflow) to only build and test.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --release --locked
+      - run: cargo build --release --locked
+      - run: Copy-Item target/release/airbridge-rust.exe Duetto.exe
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: gh release create "$env:GITHUB_REF_NAME" Duetto.exe --title "合鸣 Duetto $env:GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

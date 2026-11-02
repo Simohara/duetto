@@ -87,6 +87,16 @@ uv run --no-project --with "fonttools[woff]" scripts/subset_font.py
 
 在 `web/` 目录用任意静态服务器打开 `index.html`，会自动加载 `mock.js` 模拟后端，方便调界面。协议库 `vendor/cidermill-airplay` 是打过补丁的本地副本，构建时必须保留。
 
+发布新版：先改 `Cargo.toml` 里的 `version` 并提交，再推送同名标签，GitHub Actions 会构建、测试并把 `Duetto.exe` 发布到这个标签的 Release：
+
+```bash
+git tag v0.1.1
+```
+
+```bash
+git push origin v0.1.1
+```
+
 ## 限制
 
 - 不支持需要连接密码的音响；遇到这种音响，卡片上会显示提示。
