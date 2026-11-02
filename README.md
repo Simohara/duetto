@@ -90,6 +90,12 @@ cargo build --release --locked
 
 The page in `web/`, GSAP and the Noto Sans SC subset are embedded in the EXE at compile time, so rebuild after changing the page.
 
+The embedded font holds only the characters the interface uses. After changing interface text, regenerate it (a test fails until you do):
+
+```bash
+uv run --no-project --with "fonttools[woff]" scripts/subset_font.py
+```
+
 To work on the interface without the backend, open `web/index.html` from any static file server. It then loads `mock.js` as a fake backend.
 
 `vendor/cidermill-airplay` is a patched local copy of the protocol library and must stay in place for the build.

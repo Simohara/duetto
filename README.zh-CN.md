@@ -79,7 +79,13 @@ cargo test --release --locked
 cargo build --release --locked
 ```
 
-`web/` 里的页面、GSAP 和思源黑体子集在编译时嵌入 EXE，改了页面要重新构建。在 `web/` 目录用任意静态服务器打开 `index.html`，会自动加载 `mock.js` 模拟后端，方便调界面。协议库 `vendor/cidermill-airplay` 是打过补丁的本地副本，构建时必须保留。
+`web/` 里的页面、GSAP 和思源黑体子集在编译时嵌入 EXE，改了页面要重新构建。嵌入的字体只含界面用到的字，改了界面文字要重新裁剪（不重裁会有测试失败）：
+
+```bash
+uv run --no-project --with "fonttools[woff]" scripts/subset_font.py
+```
+
+在 `web/` 目录用任意静态服务器打开 `index.html`，会自动加载 `mock.js` 模拟后端，方便调界面。协议库 `vendor/cidermill-airplay` 是打过补丁的本地副本，构建时必须保留。
 
 ## 限制
 

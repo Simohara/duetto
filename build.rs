@@ -12,7 +12,7 @@ fn main() {
 
     let Some(rc) = find_rc() else {
         println!(
-            "cargo:warning=Windows SDK rc.exe not found; the window icon is still configured at runtime, but this build will not have an Explorer icon resource."
+            "cargo:warning=Windows SDK rc.exe not found; this build will have no window or Explorer icon."
         );
         return;
     };

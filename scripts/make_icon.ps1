@@ -77,10 +77,6 @@ try {
         $fg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
         $fg.DrawImage($bitmap, 0, 0, $size, $size)
         $fg.Dispose()
-        if ($size -eq 256) {
-            $frame.Save((Join-Path $AssetDirectory 'airbridge-256.png'),
-                [System.Drawing.Imaging.ImageFormat]::Png)
-        }
         $stream = [System.IO.MemoryStream]::new()
         $frame.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
         $pngFrames.Add($stream.ToArray())

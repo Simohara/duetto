@@ -2235,8 +2235,8 @@ fn asset(path: &str) -> Option<(&'static [u8], &'static str)> {
             &include_bytes!("../web/vendor/DrawSVGPlugin.min.js")[..],
             "text/javascript",
         ),
-        "/fonts/NotoSansSC-GB2312.woff2" => (
-            &include_bytes!("../web/fonts/NotoSansSC-GB2312.woff2")[..],
+        "/fonts/NotoSansSC-UI.woff2" => (
+            &include_bytes!("../web/fonts/NotoSansSC-UI.woff2")[..],
             "font/woff2",
         ),
         _ => return None,
@@ -2261,12 +2261,10 @@ fn window_theme(theme: &str) -> Option<tao::window::Theme> {
     }
 }
 
+/// Icon 1 from `assets/airbridge.rc`, already in the EXE for Explorer.
 fn app_icon() -> Option<tao::window::Icon> {
-    let pixels = image::load_from_memory(include_bytes!("../assets/airbridge-256.png"))
-        .ok()?
-        .to_rgba8();
-    let (width, height) = pixels.dimensions();
-    tao::window::Icon::from_rgba(pixels.into_raw(), width, height).ok()
+    use tao::platform::windows::IconExtWindows;
+    tao::window::Icon::from_resource(1, None).ok()
 }
 
 /// Only the embedded page may be shown or send commands.
@@ -2468,6 +2466,31 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_font_covers_the_interface_text() {
+        let covered = include_str!("../web/fonts/NotoSansSC-UI.txt");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for dir in ["web", "src"] {
+            for entry in std::fs::read_dir(root.join(dir)).unwrap() {
+                let path = entry.unwrap().path();
+                let ext = path.extension().and_then(|e| e.to_str());
+                if !matches!(ext, Some("html" | "js" | "rs")) {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).unwrap();
+                let missing: String = text
+                    .chars()
+                    .filter(|&c| c > '~' && !covered.contains(c))
+                    .collect();
+                assert!(
+                    missing.is_empty(),
+                    "{} uses {missing:?}; run scripts/subset_font.py",
+                    path.display()
+                );
+            }
+        }
+    }
 
     #[test]
     fn cpu_compatibility_identifies_both_x64_vendors() {
