@@ -37,28 +37,59 @@ impl Capture {
             && (!name.to_ascii_uppercase().starts_with("CABLE")
                 || !name.to_ascii_uppercase().contains("OUTPUT"))
         {
-            return Err("只允许选择 VB-CABLE 的 CABLE Output 录音设备".into());
+            return Err(tr!(
+                "只允许选择 VB-CABLE 的 CABLE Output 录音设备",
+                "Only the VB-CABLE recording device, CABLE Output, can be used",
+                "録音デバイスは VB-CABLE の CABLE Output のみ選択できます"
+            )
+            .into());
         }
         if microphone
             && (name.to_ascii_uppercase().starts_with("CABLE")
                 || name.to_ascii_uppercase().contains("LOOPBACK"))
         {
-            return Err("请选择物理麦克风".into());
+            return Err(tr!(
+                "请选择物理麦克风",
+                "Choose a physical microphone",
+                "物理マイクを選択してください"
+            )
+            .into());
         }
         let mut matches = cpal::default_host()
             .input_devices()?
             .filter(|d| d.name().ok().as_deref() == Some(name));
-        let device = matches.next().ok_or("未找到指定 CABLE Output")?;
+        let device = matches.next().ok_or_else(|| {
+            tr!(
+                "未找到指定 CABLE Output",
+                "The selected CABLE Output was not found",
+                "指定した CABLE Output が見つかりません"
+            )
+        })?;
         if matches.next().is_some() {
-            return Err("存在同名录音设备，请在 Windows 中重命名".into());
+            return Err(tr!(
+                "存在同名录音设备，请在 Windows 中重命名",
+                "Several recording devices share this name; rename them in Windows",
+                "同じ名前の録音デバイスが複数あります。Windows で名前を変更してください"
+            )
+            .into());
         }
         let format = device.default_input_config()?;
         if !microphone && format.channels() != 2 {
-            return Err("CABLE Output 必须提供立体声录音格式".into());
+            return Err(tr!(
+                "CABLE Output 必须提供立体声录音格式",
+                "CABLE Output must record in stereo",
+                "CABLE Output はステレオで録音できる必要があります"
+            )
+            .into());
         }
         let channels = format.channels() as usize;
         if channels == 0 {
-            return Err("录音设备没有声道".into());
+            return Err(tr!(
+                "录音设备没有声道",
+                "The recording device has no channels",
+                "録音デバイスにチャンネルがありません"
+            )
+            .into());
         }
         let rate = format.sample_rate().0;
         let config: StreamConfig = format.clone().into();
@@ -138,7 +169,14 @@ impl Capture {
                     None,
                 )?
             }
-            _ => return Err("当前 CABLE Output 采样格式暂不支持".into()),
+            _ => {
+                return Err(tr!(
+                    "当前 CABLE Output 采样格式暂不支持",
+                    "This CABLE Output sample format is not supported yet",
+                    "この CABLE Output のサンプル形式にはまだ対応していません"
+                )
+                .into());
+            }
         };
         stream.play()?;
         Ok(Self {
@@ -162,7 +200,12 @@ impl Capture {
                 return Ok(packet);
             }
             if std::time::Instant::now() >= deadline {
-                return Err("等待录音数据超时".into());
+                return Err(tr!(
+                    "等待录音数据超时",
+                    "Timed out waiting for captured audio",
+                    "録音データの待機がタイムアウトしました"
+                )
+                .into());
             }
             std::thread::sleep(Duration::from_millis(2));
         }
@@ -173,7 +216,12 @@ impl Capture {
     pub fn poll_packet(&mut self, count: usize) -> Result<Option<Vec<i32>>, Box<dyn Error>> {
         while self.pending_packet.len() < count * 2 {
             if self.overflow.load(Ordering::Acquire) {
-                return Err("音频采集缓冲溢出或设备断开".into());
+                return Err(tr!(
+                    "音频采集缓冲溢出或设备断开",
+                    "The capture buffer overflowed, or the device was disconnected",
+                    "音声キャプチャのバッファがあふれたか、デバイスが切断されました"
+                )
+                .into());
             }
             if let Some(frame) = self.converter.next() {
                 for value in frame {

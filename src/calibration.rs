@@ -104,7 +104,11 @@ fn rms(values: &[f32]) -> f32 {
 }
 fn peaks(signal: &[f32], ref_: &[f32]) -> Result<Vec<(usize, f32)>, String> {
     if signal.len() < ref_.len() + PERIOD * 2 {
-        return Err("麦克风录音不完整".into());
+        return Err(tr!(
+            "麦克风录音不完整",
+            "The microphone recording is incomplete",
+            "マイクの録音が途中で途切れています"
+        ));
     }
     let corr = correlation(signal, ref_);
     let energy = ref_.iter().map(|v| v * v).sum::<f32>();
@@ -116,7 +120,13 @@ fn peaks(signal: &[f32], ref_: &[f32]) -> Result<Vec<(usize, f32)>, String> {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
-            .ok_or("未检测到测试音")?;
+            .ok_or_else(|| {
+                tr!(
+                    "未检测到测试音",
+                    "No test tone detected",
+                    "テスト音を検出できません"
+                )
+            })?;
         let factor = value / energy;
         if factor.abs() < 0.01 {
             break;
@@ -148,11 +158,19 @@ fn peaks(signal: &[f32], ref_: &[f32]) -> Result<Vec<(usize, f32)>, String> {
 /// Returns `(right minus left arrival in ms, right minus left level in dB)`.
 pub fn analyze(signal: &[f32]) -> Result<(f64, f64), String> {
     if signal.iter().any(|x| x.abs() > 32000.) {
-        return Err("麦克风削顶，请降低测试音量".into());
+        return Err(tr!(
+            "麦克风削顶，请降低测试音量",
+            "The microphone is clipping; lower the test volume",
+            "マイク入力が音割れしています。テスト音量を下げてください"
+        ));
     }
     let p = peaks(signal, &reference(1357))?;
     if p.is_empty() {
-        return Err("没有检测到测试脉冲：请提高测试音量或总音量，并确认选择了正确的麦克风".into());
+        return Err(tr!(
+            "没有检测到测试脉冲：请提高测试音量或总音量，并确认选择了正确的麦克风",
+            "No test bursts detected: raise the test or master volume, and check that the right microphone is selected",
+            "テストパルスを検出できません。テスト音量かマスター音量を上げ、正しいマイクを選んでいるか確認してください"
+        ));
     }
     let repeats = |idx: usize| {
         p.iter()
@@ -174,7 +192,11 @@ pub fn analyze(signal: &[f32]) -> Result<(f64, f64), String> {
                 let l = burst_rms(signal, left);
                 let r = burst_rms(signal, right);
                 if l < 30. || r < 30. {
-                    return Err("麦克风音量信号过弱，请提高测试音量".into());
+                    return Err(tr!(
+                        "麦克风音量信号过弱，请提高测试音量",
+                        "The microphone signal is too weak; raise the test volume",
+                        "マイクの信号が弱すぎます。テスト音量を上げてください"
+                    ));
                 }
                 pairs.push((
                     (gap - RATE as i64) as f64 * 1000.0 / RATE as f64,
@@ -191,13 +213,17 @@ pub fn analyze(signal: &[f32]) -> Result<(f64, f64), String> {
             })
         });
         return Err(if two_sided {
-            format!(
+            tr!(
                 "两侧测试脉冲没有稳定重复（检测到 {} 个），请保持安静、关闭麦克风降噪后重试",
+                "The bursts from the two sides did not repeat steadily ({} detected); keep the room quiet, turn off microphone noise suppression and try again",
+                "左右のテストパルスが安定して繰り返されませんでした（{} 個検出）。静かな状態を保ち、マイクのノイズ抑制をオフにしてやり直してください",
                 p.len()
             )
         } else {
-            format!(
+            tr!(
                 "只检测到一侧的测试脉冲（{} 个），另一侧太弱或没有发声；连续测试时请确认左侧 220 Hz 低音和右侧 330 Hz 高音都能听到",
+                "Bursts came from one side only ({}); the other side is too quiet or silent. During the continuous test, make sure you can hear both the low 220 Hz tone on the left and the high 330 Hz tone on the right",
+                "片側のテストパルスしか検出できませんでした（{} 個）。もう片側の音が小さすぎるか、鳴っていません。連続テスト中に、左の 220 Hz の低い音と右の 330 Hz の高い音が両方聞こえるか確認してください",
                 p.len()
             )
         });
@@ -211,13 +237,19 @@ pub fn analyze(signal: &[f32]) -> Result<(f64, f64), String> {
     };
     let (timing, timing_spread) = spread(&mut pairs.iter().map(|x| x.0).collect());
     if timing_spread > 5.0 {
-        return Err(format!(
-            "延迟测量不一致（相差 {timing_spread:.1} ms），请保持安静、不要移动麦克风后重试"
+        return Err(tr!(
+            "延迟测量不一致（相差 {timing_spread:.1} ms），请保持安静、不要移动麦克风后重试",
+            "Delay readings disagree by {timing_spread:.1} ms; keep the room quiet, leave the microphone where it is and try again",
+            "遅延の測定値がばらついています（差 {timing_spread:.1} ms）。静かな状態で、マイクを動かさずにやり直してください"
         ));
     }
     let (level, level_spread) = spread(&mut pairs.iter().map(|x| x.1).collect());
     if level_spread > 3.0 || level.abs() > 18.0 {
-        return Err("音量测量不稳定或差异过大".into());
+        return Err(tr!(
+            "音量测量不稳定或差异过大",
+            "The level readings are unstable or too far apart",
+            "音量の測定値が不安定か、差が大きすぎます"
+        ));
     }
     Ok((timing, level))
 }
@@ -271,16 +303,30 @@ pub fn record(
     mode: &AtomicU32,
     expected: u32,
 ) -> Result<Vec<f32>, String> {
-    let mut capture = Capture::microphone(mic).map_err(|e| format!("无法打开麦克风：{e}"))?;
+    let mut capture = Capture::microphone(mic).map_err(|e| {
+        tr!(
+            "无法打开麦克风：{e}",
+            "Cannot open the microphone: {e}",
+            "マイクを開けません：{e}"
+        )
+    })?;
     let mut result = Vec::with_capacity(RATE * 13);
     while result.len() < RATE * 13 {
         if stop.load(Ordering::Acquire) || mode.load(Ordering::Acquire) != expected {
-            return Err("连接或测试已结束，测量已取消".into());
+            return Err(tr!(
+                "连接或测试已结束，测量已取消",
+                "The connection or test ended, so the measurement was cancelled",
+                "接続またはテストが終了したため、測定を中止しました"
+            ));
         }
         let count = (RATE * 13 - result.len()).min(2048);
-        let block = capture
-            .packet(count)
-            .map_err(|e| format!("麦克风录音失败：{e}"))?;
+        let block = capture.packet(count).map_err(|e| {
+            tr!(
+                "麦克风录音失败：{e}",
+                "Microphone recording failed: {e}",
+                "マイクの録音に失敗しました：{e}"
+            )
+        })?;
         result.extend(block.as_chunks::<2>().0.iter().map(|s| s[0] as f32));
     }
     Ok(result)
@@ -302,7 +348,11 @@ pub fn propose(
     right_trim: f64,
 ) -> Result<Proposal, String> {
     if !difference.is_finite() || !sensitivity.is_finite() {
-        return Err("测量结果无效".into());
+        return Err(tr!(
+            "测量结果无效",
+            "The measurement is invalid",
+            "測定結果が無効です"
+        ));
     }
     // `+ 0.0` turns -0.0 into 0.0 for display.
     let tenth = |value: f64| (value * 10.0).round() / 10.0 + 0.0;
@@ -311,7 +361,11 @@ pub fn propose(
     let common = dl.min(dr);
     let (dl, dr) = (tenth(dl - common), tenth(dr - common));
     if dl > 2000.0 || dr > 2000.0 {
-        return Err("所需延迟超出范围".into());
+        return Err(tr!(
+            "所需延迟超出范围",
+            "The required delay is out of range",
+            "必要な遅延が範囲外です"
+        ));
     }
     let (mut tl, mut tr) = (left_trim, right_trim);
     if sensitivity > 0.0 {
@@ -322,7 +376,11 @@ pub fn propose(
     let top = tl.max(tr);
     let (tl, tr) = (tenth(tl - top), tenth(tr - top));
     if tl.min(tr) < -24.0 {
-        return Err("所需电平修正超过 24 dB，请检查音响摆放或先调整独立音量".into());
+        return Err(tr!(
+            "所需电平修正超过 24 dB，请检查音响摆放或先调整独立音量",
+            "The required trim exceeds 24 dB; check the speaker placement, or adjust the speaker volumes first",
+            "必要なレベル補正が 24 dB を超えています。スピーカーの配置を確認するか、先にスピーカー音量を調整してください"
+        ));
     }
     Ok((dl, dr, tl, tr, difference, sensitivity))
 }
@@ -336,21 +394,34 @@ pub fn measure(
     right_trim: f64,
 ) -> Result<Proposal, String> {
     if stop.load(Ordering::Acquire) || mode.load(Ordering::Acquire) != 1 {
-        return Err("测试已结束".into());
+        return Err(tr!(
+            "测试已结束",
+            "The test has ended",
+            "テストは終了しています"
+        ));
     }
     mode.store(2, Ordering::Release);
     let result = (|| {
         // Let the send queue and receiver buffers play out the previous signal.
         for _ in 0..40 {
             if stop.load(Ordering::Acquire) || mode.load(Ordering::Acquire) != 2 {
-                return Err("测试已取消".into());
+                return Err(tr!(
+                    "测试已取消",
+                    "The test was cancelled",
+                    "テストを中止しました"
+                ));
             }
             std::thread::sleep(Duration::from_millis(100));
         }
         let audio = record(&mic, &stop, &mode, 2)?;
         let (difference, sensitivity) =
             analyze(&audio).map_err(|error| match save_failed_recording(&audio) {
-                Some(path) => format!("{error}（录音已保存到 {}）", path.display()),
+                Some(path) => tr!(
+                    "{error}（录音已保存到 {}）",
+                    "{error} (recording saved to {})",
+                    "{error}（録音を {} に保存しました）",
+                    path.display()
+                ),
                 None => error,
             })?;
         propose(

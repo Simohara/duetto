@@ -16,7 +16,7 @@
         <circle class="logo-r" cx="306" cy="256" r="104"/>
         <path class="logo-lens" d="M256 164.8A104 104 0 0 1 256 347.2A104 104 0 0 1 256 164.8Z"/>
       </svg>
-      <div class="wordmark"><b>合鸣</b><span>Duetto</span></div>
+      <div class="wordmark"><b data-i18n="brand.name">合鸣</b><span data-i18n="brand.sub">Duetto</span></div>
       <button class="icon-btn" id="theme-toggle" aria-label="切换深色模式">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <g class="sun"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></g>
@@ -24,19 +24,19 @@
         </svg>
       </button>
     </div>
-    <nav class="nav" role="tablist" aria-label="页面">
+    <nav class="nav" role="tablist" aria-label="页面" data-i18n-aria="nav.label">
       <span class="pill"></span>
-      <button role="tab" data-tab="speakers" aria-selected="true">音响</button>
-      <button role="tab" data-tab="calibrate" aria-selected="false">校准</button>
-      <button role="tab" data-tab="settings" aria-selected="false">设置</button>
+      <button role="tab" data-tab="speakers" aria-selected="true" data-i18n="nav.speakers">音响</button>
+      <button role="tab" data-tab="calibrate" aria-selected="false" data-i18n="nav.calibrate">校准</button>
+      <button role="tab" data-tab="settings" aria-selected="false" data-i18n="nav.settings">设置</button>
     </nav>
     <div class="side-foot">
-      <div class="state" id="state"><span class="lamp"><i class="ring"></i><i></i></span><span id="state-label">已停止</span></div>
+      <div class="state" id="state"><span class="lamp"><i class="ring"></i><i></i></span><span id="state-label" data-i18n="run.idle">已停止</span></div>
       <div class="master">
-        <label for="master">总音量 <span class="num" id="master-out">100%</span></label>
-        <input id="master" type="range" min="0" max="100" value="100" title="按比例缩放所有音响的信号，保留校准分贝差">
+        <label for="master"><span data-i18n="master.label">总音量</span> <span class="num" id="master-out">100%</span></label>
+        <input id="master" type="range" min="0" max="100" value="100" title="按比例缩放所有音响的信号，保留校准分贝差" data-i18n-title="master.title">
       </div>
-      <button class="btn primary wide" id="start"><span class="label">开始桥接</span></button>
+      <button class="btn primary wide" id="start"><span class="label" data-i18n="start">开始桥接</span></button>
     </div>
   </aside>
 
@@ -45,120 +45,130 @@
       <div class="body" id="body">
         <section class="page" id="page-speakers">
           <div class="title-row">
-            <h1 data-split>音响</h1>
-            <button class="btn" id="scan" data-enter><span class="label">扫描音响</span></button>
+            <h1 data-split data-i18n="speakers.title">音响</h1>
+            <button class="btn" id="scan" data-enter><span class="label" data-i18n="scan">扫描音响</span></button>
           </div>
           <p class="lede" id="lede" data-enter></p>
           <div id="notices"></div>
-          <div class="map" data-enter><svg id="map" role="img" aria-label="声音去向"></svg></div>
-          <h2 data-enter>输入来源</h2>
+          <div class="map" data-enter><svg id="map" role="img" aria-label="声音去向" data-i18n-aria="map.label"></svg></div>
+          <h2 data-enter data-i18n="input.heading">输入来源</h2>
           <div class="row" data-enter>
-            <select id="device" aria-label="音频输入"></select>
-            <span class="meter" id="meter" hidden title="CABLE Output 输入电平（峰值）"><span class="bar"><i id="meter-bar"></i></span><span class="num" id="meter-db"></span><span class="num" id="dropped" title="本次桥接中因网络拥塞未能立即发送的音频包；音响可请求重传补回"></span></span>
-            <button class="btn" data-cmd="refreshInputs">刷新</button>
-            <button class="btn" id="driver-page" data-cmd="openDriverPage" hidden title="打开 VB-Audio 官方页面下载 VB-CABLE 虚拟声卡驱动">下载 VB-CABLE ↗</button>
-            <button class="btn" data-cmd="openMixer">打开音量混合器 ↗</button>
+            <select id="device" aria-label="音频输入" data-i18n-aria="input.aria"></select>
+            <span class="meter" id="meter" hidden title="CABLE Output 输入电平（峰值）" data-i18n-title="meter.title"><span class="bar"><i id="meter-bar"></i></span><span class="num" id="meter-db"></span><span class="num" id="dropped" title="本次桥接中因网络拥塞未能立即发送的音频包；音响可请求重传补回" data-i18n-title="dropped.title"></span></span>
+            <button class="btn" data-cmd="refreshInputs" data-i18n="refresh">刷新</button>
+            <button class="btn" id="driver-page" data-cmd="openDriverPage" hidden title="打开 VB-Audio 官方页面下载 VB-CABLE 虚拟声卡驱动" data-i18n="driver" data-i18n-title="driver.title">下载 VB-CABLE ↗</button>
+            <button class="btn" data-cmd="openMixer" data-i18n="mixer">打开音量混合器 ↗</button>
           </div>
-          <h2 data-enter>音响列表</h2>
+          <h2 data-enter data-i18n="list.heading">音响列表</h2>
           <div id="units"></div>
           <div class="row foot-row" data-enter>
-            <label for="host">目标地址</label>
+            <label for="host" data-i18n="host.label">目标地址</label>
             <input class="field num" id="host" placeholder="192.168.1.20" autocomplete="off" spellcheck="false">
-            <button class="btn" data-cmd="addHost">添加</button>
+            <button class="btn" data-cmd="addHost" data-i18n="add">添加</button>
             <span class="gap"></span>
-            <button class="btn" id="tone" data-cmd="tone" title="向目标音响播放左、右各 2 秒的 440 Hz 提示音">播放测试音</button>
-            <button class="btn" id="pair-device" data-cmd="pairDevice" title="首次配对或凭据失效时使用">PIN 配对</button>
+            <button class="btn" id="tone" data-cmd="tone" title="向目标音响播放左、右各 2 秒的 440 Hz 提示音" data-i18n="tone" data-i18n-title="tone.title">播放测试音</button>
+            <button class="btn" id="pair-device" data-cmd="pairDevice" title="首次配对或凭据失效时使用" data-i18n="pairPin" data-i18n-title="pairPin.title">PIN 配对</button>
           </div>
           <div class="row pin-row" id="pin-row" hidden>
-            <label for="pin">音响显示的 PIN</label>
+            <label for="pin" data-i18n="pin.label">音响显示的 PIN</label>
             <input class="field num" id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off">
-            <button class="btn primary" id="pin-submit">提交 PIN</button>
+            <button class="btn primary" id="pin-submit" data-i18n="pin.submit">提交 PIN</button>
           </div>
           <div class="row pin-row" id="repair-row" hidden>
-            <span>已有配对凭据，确定重新配对？新配对成功前不会删除旧凭据。</span>
-            <button class="btn primary" id="repair-confirm">重新配对</button>
-            <button class="btn" data-cmd="cancelPair">取消</button>
+            <span data-i18n="repair.text">已有配对凭据，确定重新配对？新配对成功前不会删除旧凭据。</span>
+            <button class="btn primary" id="repair-confirm" data-i18n="repair.confirm">重新配对</button>
+            <button class="btn" data-cmd="cancelPair" data-i18n="cancel">取消</button>
           </div>
         </section>
 
         <section class="page" id="page-calibrate" hidden>
-          <h1 data-split>校准</h1>
-          <p class="lede" data-enter>把麦克风放在聆听位置并保持安静；测量立体声对两侧的到达时间和响度，并自动对齐。</p>
+          <h1 data-split data-i18n="cal.title">校准</h1>
+          <p class="lede" data-enter data-i18n="cal.lede">把麦克风放在聆听位置并保持安静；测量立体声对两侧的到达时间和响度，并自动对齐。</p>
           <div class="stage" data-enter>
-            <svg id="stage" viewBox="0 0 640 150" role="img" aria-label="声像位置">
+            <svg id="stage" viewBox="0 0 640 150" role="img" aria-label="声像位置" data-i18n-aria="stage.label">
               <line class="stage-line" x1="80" y1="64" x2="560" y2="64"/>
               <line class="stage-tick" x1="320" y1="50" x2="320" y2="78"/>
               <circle class="stage-l" cx="80" cy="64" r="15"/>
-              <text class="stage-ch" x="80" y="64">左</text>
+              <text class="stage-ch" x="80" y="64" data-i18n="ch.l">左</text>
               <circle class="stage-r" cx="560" cy="64" r="15"/>
-              <text class="stage-ch" x="560" y="64">右</text>
+              <text class="stage-ch" x="560" y="64" data-i18n="ch.r">右</text>
               <text class="stage-name" id="stage-l-name" x="80" y="104">—</text>
               <text class="stage-name" id="stage-r-name" x="560" y="104">—</text>
               <g id="phantom"><circle class="phantom-halo" cx="0" cy="0" r="22"/><circle class="phantom" cx="0" cy="0" r="9"/></g>
-              <text class="stage-label" id="phantom-label" x="320" y="28">等待测量</text>
+              <text class="stage-label" id="phantom-label" x="320" y="28" data-i18n="phantom.waiting">等待测量</text>
             </svg>
           </div>
           <div class="checks" id="checks"></div>
-          <h2 data-enter>测量设置</h2>
+          <h2 data-enter data-i18n="cal.settings">测量设置</h2>
           <div class="row" data-enter>
-            <label for="mic">麦克风</label>
+            <label for="mic" data-i18n="mic">麦克风</label>
             <select id="mic"></select>
-            <button class="btn" data-cmd="refreshMics">刷新</button>
+            <button class="btn" data-cmd="refreshMics" data-i18n="refresh">刷新</button>
             <span class="gap"></span>
-            <label for="test-volume">测试音量</label>
+            <label for="test-volume" data-i18n="testVolume">测试音量</label>
             <input id="test-volume" type="range" min="0" max="100" value="100">
             <span class="num" id="test-volume-out">100%</span>
           </div>
           <div class="row actions" data-enter>
-            <button class="btn" id="test-toggle"><span class="label">开启连续测试</span></button>
-            <button class="btn" id="measure"><span class="label">测量并调平</span></button>
+            <button class="btn" id="test-toggle"><span class="label" data-i18n="test.start">开启连续测试</span></button>
+            <button class="btn" id="measure"><span class="label" data-i18n="measure">测量并调平</span></button>
           </div>
           <div class="progress" id="progress" hidden><p id="progress-label"></p><div class="bar"><i id="progress-bar"></i></div></div>
-          <h2 data-enter>结果</h2>
+          <h2 data-enter data-i18n="results">结果</h2>
           <div class="figures" data-enter>
-            <div><small>右侧相对左侧到达</small><strong class="num" id="fig-ms">—</strong></div>
-            <div><small>右侧相对左侧响度</small><strong class="num" id="fig-db">—</strong></div>
+            <div><small data-i18n="fig.ms">右侧相对左侧到达</small><strong class="num" id="fig-ms">—</strong></div>
+            <div><small data-i18n="fig.db">右侧相对左侧响度</small><strong class="num" id="fig-db">—</strong></div>
           </div>
           <table class="sides" data-enter>
-            <thead><tr><th></th><th>音响</th><th>延迟</th><th>电平修正</th></tr></thead>
+            <thead><tr><th></th><th data-i18n="col.speaker">音响</th><th data-i18n="col.delay">延迟</th><th data-i18n="col.trim">电平修正</th></tr></thead>
             <tbody>
-              <tr><td><span class="badge left">左</span></td><td id="cal-l-name">—</td><td class="num" id="cal-l-delay">—</td><td class="num" id="cal-l-trim">—</td></tr>
-              <tr><td><span class="badge right">右</span></td><td id="cal-r-name">—</td><td class="num" id="cal-r-delay">—</td><td class="num" id="cal-r-trim">—</td></tr>
+              <tr><td><span class="badge left" data-i18n="ch.l">左</span></td><td id="cal-l-name">—</td><td class="num" id="cal-l-delay">—</td><td class="num" id="cal-l-trim">—</td></tr>
+              <tr><td><span class="badge right" data-i18n="ch.r">右</span></td><td id="cal-r-name">—</td><td class="num" id="cal-r-delay">—</td><td class="num" id="cal-r-trim">—</td></tr>
             </tbody>
           </table>
         </section>
 
         <section class="page" id="page-settings" hidden>
-          <h1 data-split>设置</h1>
-          <p class="lede" data-enter>改动约 1 秒后自动保存；播放相关设置在下次开始桥接时生效。</p>
+          <h1 data-split data-i18n="settings.title">设置</h1>
+          <p class="lede" data-enter data-i18n="settings.lede">改动约 1 秒后自动保存；播放相关设置在下次开始桥接时生效。</p>
           <div class="setting" data-enter>
-            <div><b>外观</b><span>深色模式适合夜间；跟随系统时随 Windows 设置切换。</span></div>
-            <div class="seg" id="theme-seg" role="radiogroup" aria-label="外观">
+            <div><b data-i18n="appearance">外观</b><span data-i18n="appearance.desc">深色模式适合夜间；跟随系统时随 Windows 设置切换。</span></div>
+            <div class="seg" id="theme-seg" role="radiogroup" aria-label="外观" data-i18n-aria="appearance">
               <span class="thumb"></span>
-              <button role="radio" data-theme="light">浅色</button>
-              <button role="radio" data-theme="dark">深色</button>
-              <button role="radio" data-theme="system">跟随系统</button>
+              <button role="radio" data-theme="light" data-i18n="theme.light">浅色</button>
+              <button role="radio" data-theme="dark" data-i18n="theme.dark">深色</button>
+              <button role="radio" data-theme="system" data-i18n="system">跟随系统</button>
             </div>
           </div>
           <div class="setting" data-enter>
-            <div><b>播放缓冲</b><span>音响端缓冲：越大越能扛住 Wi-Fi 丢包，越小声音越及时（看视频时音画更同步）。</span></div>
-            <input id="buffer" type="range" min="300" max="2000" step="50" value="2000" aria-label="播放缓冲">
+            <div><b data-i18n="language">语言</b><span data-i18n="language.desc">界面和状态消息使用的语言；跟随系统时按 Windows 显示语言选择。</span></div>
+            <div class="seg" id="lang-seg" role="radiogroup" aria-label="语言" data-i18n-aria="language">
+              <span class="thumb"></span>
+              <button role="radio" data-language="zh" lang="zh-CN">中文</button>
+              <button role="radio" data-language="en" lang="en">English</button>
+              <button role="radio" data-language="ja" lang="ja">日本語</button>
+              <button role="radio" data-language="system" data-i18n="system">跟随系统</button>
+            </div>
+          </div>
+          <div class="setting" data-enter>
+            <div><b data-i18n="buffer">播放缓冲</b><span data-i18n="buffer.desc">音响端缓冲：越大越能扛住 Wi-Fi 丢包，越小声音越及时（看视频时音画更同步）。</span></div>
+            <input id="buffer" type="range" min="300" max="2000" step="50" value="2000" aria-label="播放缓冲" data-i18n-aria="buffer">
             <span class="num setting-value" id="buffer-out">2000 ms</span>
           </div>
           <div class="setting" data-enter>
-            <div><b>断线自动重连</b><span>连接中断后自动重试，最多连续 10 次；配对认证失败不重试。</span></div>
-            <button class="check" id="reconnect" role="checkbox" aria-checked="false" aria-label="断线自动重连"><svg viewBox="0 0 14 14"><path d="M3 7.5 6 10l5-6"/></svg></button>
+            <div><b data-i18n="reconnect">断线自动重连</b><span data-i18n="reconnect.desc">连接中断后自动重试，最多连续 10 次；配对认证失败不重试。</span></div>
+            <button class="check" id="reconnect" role="checkbox" aria-checked="false" aria-label="断线自动重连" data-i18n-aria="reconnect"><svg viewBox="0 0 14 14"><path d="M3 7.5 6 10l5-6"/></svg></button>
           </div>
           <div class="setting" data-enter>
-            <div><b>导入旧版配对凭据</b><span>从 Python 版读取已扫描音响的 PIN 配对凭据；只在点击时导入，不会覆盖已有凭据。</span></div>
-            <button class="btn" id="import-legacy" data-cmd="importLegacyCredentials">导入</button>
+            <div><b data-i18n="import">导入旧版配对凭据</b><span data-i18n="import.desc">从 Python 版读取已扫描音响的 PIN 配对凭据；只在点击时导入，不会覆盖已有凭据。</span></div>
+            <button class="btn" id="import-legacy" data-cmd="importLegacyCredentials" data-i18n="import.btn">导入</button>
           </div>
-          <h2 data-enter>诊断</h2>
+          <h2 data-enter data-i18n="diag">诊断</h2>
           <dl class="diag" data-enter>
-            <dt>处理器</dt><dd id="diag-cpu">—</dd>
+            <dt data-i18n="diag.cpu">处理器</dt><dd id="diag-cpu">—</dd>
             <dt>WebView2</dt><dd id="diag-webview">—</dd>
-            <dt>诊断日志</dt><dd>%LOCALAPPDATA%\AirBridge-Rust\diagnostics.log</dd>
-            <dt>导出</dt><dd><button class="btn small" data-cmd="exportDiagnostics" title="写入 diagnostics-export 文件夹：包含音响名称、IP 地址和输入设备名称，不包含配对凭据、PIN、密码或音频内容">导出诊断</button></dd>
+            <dt data-i18n="diag.log">诊断日志</dt><dd>%LOCALAPPDATA%\AirBridge-Rust\diagnostics.log</dd>
+            <dt data-i18n="diag.export">导出</dt><dd><button class="btn small" data-cmd="exportDiagnostics" title="写入 diagnostics-export 文件夹：包含音响名称、IP 地址和输入设备名称，不包含配对凭据、PIN、密码或音频内容" data-i18n="export.btn" data-i18n-title="export.title">导出诊断</button></dd>
           </dl>
         </section>
       </div>
@@ -169,8 +179,8 @@
 <script src="vendor/gsap.min.js"></script>
 <script src="vendor/Flip.min.js"></script>
 <script src="vendor/SplitText.min.js"></script>
-<script src="vendor/MotionPathPlugin.min.js"></script>
 <script src="vendor/DrawSVGPlugin.min.js"></script>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

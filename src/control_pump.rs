@@ -22,7 +22,12 @@ pub struct RequestTimeout {
 }
 impl fmt::Display for RequestTimeout {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "控制请求 CSeq {} 等待回复超时", self.cseq)
+        let cseq = self.cseq;
+        f.write_str(&tr!(
+            "控制请求 CSeq {cseq} 等待回复超时",
+            "Control request CSeq {cseq} timed out waiting for a reply",
+            "制御リクエスト CSeq {cseq} の応答待ちがタイムアウトしました"
+        ))
     }
 }
 impl std::error::Error for RequestTimeout {}

@@ -42,7 +42,13 @@ fn setup_body(timing_port: u16, session_uuid: &str) -> Result<Vec<u8>> {
     let mut encoded = Vec::new();
     Value::Dictionary(body)
         .to_writer_binary(&mut encoded)
-        .map_err(|error| AirPlayError::Protocol(format!("无法编码会话 SETUP：{error}")))?;
+        .map_err(|error| {
+            AirPlayError::Protocol(tr!(
+                "无法编码会话 SETUP：{error}",
+                "Cannot encode the session SETUP: {error}",
+                "セッション SETUP をエンコードできません：{error}"
+            ))
+        })?;
     Ok(encoded)
 }
 
@@ -87,9 +93,13 @@ pub fn start(channel: &mut ControlChannel) -> Result<Session> {
 /// Python derives the audio `shk` with Events-Write-Encryption-Key. The crate's
 /// event transport crosses the labels, so this is its event *read* key.
 pub fn audio_key(channel: &ControlChannel) -> Result<[u8; 32]> {
-    let keys = channel
-        .session_keys()
-        .ok_or_else(|| AirPlayError::InvalidState("音频流需要已经验证的会话密钥".into()))?;
+    let keys = channel.session_keys().ok_or_else(|| {
+        AirPlayError::InvalidState(tr!(
+            "音频流需要已经验证的会话密钥",
+            "The audio stream needs verified session keys",
+            "音声ストリームには検証済みのセッション鍵が必要です"
+        ))
+    })?;
     Ok(keys.event_keys()?.read)
 }
 

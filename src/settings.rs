@@ -20,6 +20,8 @@ pub struct Settings {
     pub buffer_ms: u32,
     /// "light", "dark" or "system".
     pub theme: String,
+    /// "zh", "en", "ja" or "system".
+    pub language: String,
     pub routes: BTreeMap<String, SavedRoute>,
     /// Written by builds with stereo pairs; older files get the one-time
     /// left/right auto-pair migration.
@@ -36,6 +38,7 @@ impl Default for Settings {
             reconnect: false,
             buffer_ms: 2000,
             theme: "system".into(),
+            language: "system".into(),
             routes: BTreeMap::new(),
             pairs: false,
         }
@@ -235,7 +238,11 @@ fn path() -> Option<PathBuf> {
 /// were. Only a route whose address is unusable is dropped.
 fn parse(data: &[u8]) -> Result<(Settings, bool), String> {
     if data.len() > 1_048_576 {
-        return Err("设置文件超过 1 MB".into());
+        return Err(tr!(
+            "设置文件超过 1 MB",
+            "The settings file is larger than 1 MB",
+            "設定ファイルが 1 MB を超えています"
+        ));
     }
     // Notepad saves UTF-8 with a BOM, which serde_json rejects.
     let data = data.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(data);
@@ -246,6 +253,9 @@ fn parse(data: &[u8]) -> Result<(Settings, bool), String> {
     settings.buffer_ms = settings.buffer_ms.clamp(300, 2000);
     if !matches!(settings.theme.as_str(), "light" | "dark" | "system") {
         settings.theme = "system".into();
+    }
+    if !matches!(settings.language.as_str(), "zh" | "en" | "ja" | "system") {
+        settings.language = "system".into();
     }
     settings
         .routes
@@ -316,7 +326,14 @@ pub fn save(settings: &Settings) -> Result<(), String> {
     save_to(&path().ok_or("缺少 LOCALAPPDATA")?, settings)
 }
 fn save_to(path: &Path, settings: &Settings) -> Result<(), String> {
-    fs::create_dir_all(path.parent().ok_or("设置目录无效")?).map_err(|e| e.to_string())?;
+    fs::create_dir_all(path.parent().ok_or_else(|| {
+        tr!(
+            "设置目录无效",
+            "Invalid settings folder",
+            "設定フォルダーが無効です"
+        )
+    })?)
+    .map_err(|e| e.to_string())?;
     let data = serde_json::to_vec_pretty(settings).map_err(|e| e.to_string())?;
     let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
     // Flushed before the rename, so a power loss cannot leave an empty file.
@@ -342,7 +359,11 @@ fn save_to(path: &Path, settings: &Settings) -> Result<(), String> {
     };
     if success == 0 {
         let _ = fs::remove_file(tmp);
-        return Err("无法保存设置".into());
+        return Err(tr!(
+            "无法保存设置",
+            "Cannot save the settings",
+            "設定を保存できません"
+        ));
     }
     Ok(())
 }

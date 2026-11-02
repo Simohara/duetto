@@ -25,6 +25,8 @@ fn safe_message(message: &str) -> String {
         "密码",
         "凭据",
         "口令",
+        "パスワード",
+        "認証情報",
     ]
     .iter()
     .any(|key| lower.contains(key));

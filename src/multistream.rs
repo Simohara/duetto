@@ -117,7 +117,14 @@ pub fn run(
     report: impl Fn(String) + Send + 'static,
 ) -> Result<(), GroupError> {
     if routes.is_empty() || routes.len() > 16 {
-        return Err(fail("请选择 1–16 台音响", false));
+        return Err(fail(
+            tr!(
+                "请选择 1–16 台音响",
+                "Select 1–16 speakers",
+                "スピーカーを 1～16 台選択してください"
+            ),
+            false,
+        ));
     }
     let mut handles = Vec::new();
     let mut outputs = Vec::new();
@@ -152,14 +159,22 @@ pub fn run(
             if let Err(error) = result {
                 let fatal = authentication_failure(error.as_ref());
                 let mode = match phase.load(Ordering::Acquire) {
-                    1 => "连续测试/延迟测量",
-                    2 => "音量测量",
-                    _ => "正常播放",
+                    1 => tr!("连续测试/延迟测量", "the continuous test", "連続テスト／遅延測定"),
+                    2 => tr!("音量测量", "level measurement", "音量測定"),
+                    _ => tr!("正常播放", "playback", "通常再生"),
                 };
                 let msg = if fatal {
-                    format!("音响 {host} 验证失败，请检查配对或访问设置。")
+                    tr!(
+                        "音响 {host} 验证失败，请检查配对或访问设置。",
+                        "Speaker {host} failed authentication; check the pairing or the speaker's access settings.",
+                        "スピーカー {host} の認証に失敗しました。ペアリングまたはアクセス設定を確認してください。"
+                    )
                 } else {
-                    format!("音响 {host} 连接中断（{mode}）：{error}")
+                    tr!(
+                        "音响 {host} 连接中断（{mode}）：{error}",
+                        "Speaker {host} disconnected during {mode}: {error}",
+                        "スピーカー {host} の接続が切れました（{mode}）：{error}"
+                    )
                 };
                 let _ = errors.send(fail(msg, !fatal));
                 cancel.store(true, Ordering::Release);
@@ -181,16 +196,33 @@ pub fn run(
         }
     }
     let result = if stop.load(Ordering::Acquire) {
-        Err(errors_rx
-            .try_recv()
-            .unwrap_or_else(|_| fail("音响连接已取消或超时", true)))
+        Err(errors_rx.try_recv().unwrap_or_else(|_| {
+            fail(
+                tr!(
+                    "音响连接已取消或超时",
+                    "The speaker connection was cancelled or timed out",
+                    "スピーカーの接続が中止されたか、タイムアウトしました"
+                ),
+                true,
+            )
+        }))
     } else {
-        report(format!(
-            "{} 台音响已连接，正在采集 CABLE Output。",
-            outputs.len()
+        let n = outputs.len();
+        let noun = if n == 1 { "speaker" } else { "speakers" };
+        report(tr!(
+            "{n} 台音响已连接，正在采集 CABLE Output。",
+            "{n} {noun} connected; capturing CABLE Output.",
+            "スピーカー {n} 台に接続しました。CABLE Output から取り込んでいます。"
         ));
         match Capture::start(&input) {
-            Err(error) => Err(fail(format!("无法打开采集设备：{error}"), false)),
+            Err(error) => Err(fail(
+                tr!(
+                    "无法打开采集设备：{error}",
+                    "Cannot open the capture device: {error}",
+                    "キャプチャデバイスを開けません：{error}"
+                ),
+                false,
+            )),
             Ok(mut capture) => {
                 let frames = cidermill_airplay::audio::StreamFormat::PCM_44100_16_STEREO
                     .frames_per_packet as usize;
@@ -221,15 +253,21 @@ pub fn run(
                                 ) {
                                     Ok(()) => {}
                                     Err(EnqueueError::Stalled) => {
-                                        failure = Some(format!(
+                                        failure = Some(tr!(
                                             "音响 {host} 音频发送持续堵塞（缓冲约 {} ms，等待 {} ms 仍未恢复），已停止所有音响。",
+                                            "Audio to speaker {host} stayed blocked (about {} ms buffered, still stuck after {} ms); all speakers were stopped.",
+                                            "スピーカー {host} への音声送信が詰まったままです（バッファ約 {} ms、{} ms 待っても回復しません）。すべてのスピーカーを停止しました。",
                                             SEND_QUEUE_PACKETS * frames * 1000 / 44100,
                                             SEND_STALL_TIMEOUT.as_millis(),
                                         ));
                                         break;
                                     }
                                     Err(EnqueueError::Disconnected) => {
-                                        failure = Some(format!("音响 {host} 发送中断。"));
+                                        failure = Some(tr!(
+                                            "音响 {host} 发送中断。",
+                                            "Sending to speaker {host} stopped.",
+                                            "スピーカー {host} への送信が途切れました。"
+                                        ));
                                         break;
                                     }
                                     Err(EnqueueError::Cancelled) => break,
@@ -247,7 +285,13 @@ pub fn run(
                                 primed.store(true, Ordering::Release);
                             }
                         }
-                        Err(error) => failure = Some(format!("采集失败：{error}")),
+                        Err(error) => {
+                            failure = Some(tr!(
+                                "采集失败：{error}",
+                                "Capture failed: {error}",
+                                "キャプチャに失敗しました：{error}"
+                            ))
+                        }
                     }
                     if failure.is_some() {
                         break;

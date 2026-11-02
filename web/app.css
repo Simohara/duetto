@@ -31,6 +31,11 @@ body {
   font: 15px/1.5 "Noto Sans SC", "Microsoft YaHei UI", sans-serif;
   -webkit-font-smoothing: antialiased; overflow: hidden; user-select: none;
 }
+/* Japanese kanji take Japanese glyph shapes from the system's Noto Sans JP or Yu Gothic, not the embedded SC forms. */
+/* CJK fonts draw quotes, dashes and the ellipsis full width; English takes them from Segoe UI. */
+@font-face { font-family: "Latin Punctuation"; src: local("Segoe UI"); unicode-range: U+2013-2014, U+2018-201D, U+2026; }
+html:lang(en) body { font-family: "Latin Punctuation", "Noto Sans SC", "Microsoft YaHei UI", sans-serif; }
+html:lang(ja) body { font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo UI", sans-serif; }
 input, select, button { font: inherit; color: inherit; }
 input { user-select: text; }
 [hidden] { display: none !important; }
@@ -154,9 +159,11 @@ h2 { margin: 28px 0 10px; font-size: 16px; font-weight: 700; }
 .map .tag-right { fill: var(--right); }
 .map .tag-ink { fill: var(--badge-ink); font-size: 11px; font-weight: 700; text-anchor: middle; }
 .map .pair-label { font-size: 12px; fill: var(--muted); text-anchor: middle; }
-.map .dot-left { fill: var(--left); }
-.map .dot-right { fill: var(--right); }
-.map .dot { fill: var(--ink); }
+.map .live .wire { stroke-opacity: 0.35; }
+.map .wave { fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.map .wave-left { stroke: var(--left); }
+.map .wave-right { stroke: var(--right); }
+.map .wave-ink { stroke: var(--ink); }
 
 /* speaker units */
 #units { display: grid; gap: 10px; }

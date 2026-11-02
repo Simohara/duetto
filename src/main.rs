@@ -2,6 +2,8 @@
 //! GPL-3.0-or-later: uses cidermill-airplay. No Python runtime is used.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+#[macro_use]
+mod i18n;
 mod calibration;
 mod capture;
 mod control_pump;
@@ -232,7 +234,7 @@ impl StageError {
 }
 impl std::fmt::Display for StageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}：{}", self.stage, self.source)
+        f.write_str(&tr!("{}：{}", "{}: {}", "{}：{}", self.stage, self.source))
     }
 }
 impl std::error::Error for StageError {
@@ -348,11 +350,14 @@ fn send_audio_with_gain(
         Some(credentials) => Auth::Stored(credentials),
         None => Auth::Transient(TransientStyle::Pyatv),
     };
-    channel
-        .authenticate(auth, &mut OsRng)
-        .map_err(|e| StageError::new("音响认证", e))?;
-    let mut session =
-        pyatv_session::start(&mut channel).map_err(|e| StageError::new("建立会话", e))?;
+    channel.authenticate(auth, &mut OsRng).map_err(|e| {
+        StageError::new(
+            tr!("音响认证", "Speaker authentication", "スピーカー認証"),
+            e,
+        )
+    })?;
+    let mut session = pyatv_session::start(&mut channel)
+        .map_err(|e| StageError::new(tr!("建立会话", "Session setup", "セッション確立"), e))?;
     let sent = Arc::new(AtomicU32::new(
         volume.load(Ordering::Acquire).min(100) * 0x101,
     ));
@@ -472,8 +477,10 @@ fn drive_session(
             Ok(completions) => completions,
             Err(_) if stopping.is_some() => return Ok(()),
             Err(error) => {
-                return Err(format!(
+                return Err(tr!(
                     "控制连接中断（{}，会话 {:.1} 秒）：{error}",
+                    "Control connection lost ({}, {:.1} s into the session): {error}",
+                    "制御接続が切れました（{}、セッション開始から {:.1} 秒）：{error}",
                     pump.status(),
                     origin.elapsed().as_secs_f64()
                 )
@@ -491,9 +498,13 @@ fn drive_session(
                     diagnostics::record_error(&format!("反馈请求超时，音频继续发送：{error}"));
                 }
             } else {
-                let response = completion
-                    .result
-                    .map_err(|e| format!("控制请求 {step:?} 超时：{e}"))?;
+                let response = completion.result.map_err(|e| {
+                    tr!(
+                        "控制请求 {step:?} 超时：{e}",
+                        "Control request {step:?} timed out: {e}",
+                        "制御リクエスト {step:?} がタイムアウトしました：{e}"
+                    )
+                })?;
                 if step == Step::SetParameter {
                     volume_pending = false;
                     if !response.is_success() {
@@ -647,14 +658,24 @@ fn drive_session(
         };
         let Some(mut samples) = samples else {
             if clock.is_some() && last_source_packet.elapsed() > Duration::from_secs(5) {
-                return Err("音频采集连续 5 秒无数据".into());
+                return Err(tr!(
+                    "音频采集连续 5 秒无数据",
+                    "No captured audio for 5 seconds",
+                    "5 秒間キャプチャ音声が届いていません"
+                )
+                .into());
             }
             thread::sleep(Duration::from_millis(2));
             continue;
         };
         last_source_packet = Instant::now();
         if samples.len() != PACKET_FRAMES as usize * 2 {
-            return Err("音频帧数无效".into());
+            return Err(tr!(
+                "音频帧数无效",
+                "Invalid audio frame count",
+                "音声フレーム数が不正です"
+            )
+            .into());
         }
         if let Some(gain) = &pcm_gain {
             scale_pcm(&mut samples, f32::from_bits(gain.load(Ordering::Acquire)));
@@ -701,7 +722,12 @@ fn sent_or_dropped(
             dropped.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
-        Err(error) => Err(format!("音频 UDP 发送失败：{error}").into()),
+        Err(error) => Err(tr!(
+            "音频 UDP 发送失败：{error}",
+            "Audio UDP send failed: {error}",
+            "音声の UDP 送信に失敗しました：{error}"
+        )
+        .into()),
     }
 }
 

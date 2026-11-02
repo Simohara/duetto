@@ -17,7 +17,13 @@ use windows_sys::Win32::{
 
 fn protected(data: &[u8], decrypt: bool) -> io::Result<Vec<u8>> {
     let input = CRYPT_INTEGER_BLOB {
-        cbData: u32::try_from(data.len()).map_err(|_| io::Error::other("凭据过大"))?,
+        cbData: u32::try_from(data.len()).map_err(|_| {
+            io::Error::other(tr!(
+                "凭据过大",
+                "Credential too large",
+                "認証情報が大きすぎます"
+            ))
+        })?,
         pbData: data.as_ptr() as *mut u8,
     };
     let mut output = CRYPT_INTEGER_BLOB {
@@ -64,7 +70,12 @@ fn filename(target: &str) -> Result<PathBuf, Box<dyn Error>> {
         format!("{target}:7000").parse()?
     };
     if !address.is_ipv4() {
-        return Err("当前仅支持 IPv4 配对地址".into());
+        return Err(tr!(
+            "当前仅支持 IPv4 配对地址",
+            "Only IPv4 pairing addresses are supported",
+            "ペアリングは IPv4 アドレスのみ対応しています"
+        )
+        .into());
     }
     let root = PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or("缺少 LOCALAPPDATA")?)
         .join("AirBridge-Rust");
@@ -102,7 +113,12 @@ fn swap_paths(a: &Path, b: &Path) -> Result<(), Box<dyn Error>> {
         (false, true) => fs::rename(b, a)?,
         (true, true) => {
             if parked.exists() {
-                return Err("存在未完成的凭据交换文件，未覆盖".into());
+                return Err(tr!(
+                    "存在未完成的凭据交换文件，未覆盖",
+                    "An unfinished credential swap file exists; nothing was overwritten",
+                    "入れ替え途中の認証情報ファイルがあるため、上書きしていません"
+                )
+                .into());
             }
             fs::rename(a, &parked)?;
             if let Err(error) = fs::rename(b, a) {
@@ -128,7 +144,13 @@ pub fn exists(target: &str) -> bool {
 /// fully on disk; otherwise an existing file is never touched.
 pub fn save(target: &str, text: &str, replace: bool) -> Result<(), Box<dyn Error>> {
     let path = filename(target)?;
-    fs::create_dir_all(path.parent().ok_or("配置目录无效")?)?;
+    fs::create_dir_all(path.parent().ok_or_else(|| {
+        tr!(
+            "配置目录无效",
+            "Invalid data folder",
+            "データフォルダーが無効です"
+        )
+    })?)?;
     let data = protected(text.as_bytes(), false)?;
     Ok(write_path(&path, &data, replace)?)
 }
@@ -160,7 +182,7 @@ fn write_path(path: &Path, data: &[u8], replace: bool) -> io::Result<()> {
 /// its file is only read, and an existing credential is never overwritten.
 /// `rows` are (address, TXT deviceid) of known speakers; returns how many
 /// were imported and skipped. Errors never carry the file's contents.
-pub fn import_python(rows: &[(String, String)]) -> Result<(usize, usize), &'static str> {
+pub fn import_python(rows: &[(String, String)]) -> Result<(usize, usize), String> {
     use std::io::Read;
     let root = std::env::var_os("LOCALAPPDATA").ok_or("缺少 LOCALAPPDATA")?;
     let path = PathBuf::from(root)
@@ -169,11 +191,18 @@ pub fn import_python(rows: &[(String, String)]) -> Result<(usize, usize), &'stat
     let mut envelope = Vec::new();
     fs::File::open(path)
         .and_then(|file| file.take(PYTHON_LIMIT + 1).read_to_end(&mut envelope))
-        .map_err(|_| "未找到旧版凭据文件")?;
+        .map_err(|_| {
+            tr!(
+                "未找到旧版凭据文件",
+                "No credential file from the old version was found",
+                "旧バージョンの認証情報ファイルが見つかりません"
+            )
+        })?;
     if envelope.len() as u64 > PYTHON_LIMIT {
-        return Err(UNREADABLE);
+        return Err(unreadable());
     }
-    let entries = serde_json::from_slice(&python_plaintext(&envelope)?).map_err(|_| UNREADABLE)?;
+    let entries =
+        serde_json::from_slice(&python_plaintext(&envelope)?).map_err(|_| unreadable())?;
     let (found, mut skipped) = python_matches(&entries, rows, &exists);
     let mut imported = 0;
     for (address, credential) in found {
@@ -187,14 +216,20 @@ pub fn import_python(rows: &[(String, String)]) -> Result<(usize, usize), &'stat
 }
 /// The Python version refuses larger vault files too.
 const PYTHON_LIMIT: u64 = 8 << 20;
-const UNREADABLE: &str = "旧版凭据无法读取（需用创建它的 Windows 账户）";
+fn unreadable() -> String {
+    tr!(
+        "旧版凭据无法读取（需用创建它的 Windows 账户）",
+        "The old credentials cannot be read (use the Windows account that created them)",
+        "旧バージョンの認証情報を読み取れません（作成した Windows アカウントで実行してください）"
+    )
+}
 /// The Python vault file is {"version":1,"dpapi":base64(DPAPI(json))}.
-fn python_plaintext(envelope: &[u8]) -> Result<Vec<u8>, &'static str> {
-    let value: serde_json::Value = serde_json::from_slice(envelope).map_err(|_| UNREADABLE)?;
+fn python_plaintext(envelope: &[u8]) -> Result<Vec<u8>, String> {
+    let value: serde_json::Value = serde_json::from_slice(envelope).map_err(|_| unreadable())?;
     let (Some(1), Some(text)) = (value["version"].as_u64(), value["dpapi"].as_str()) else {
-        return Err(UNREADABLE);
+        return Err(unreadable());
     };
-    protected(&base64(text).ok_or(UNREADABLE)?, true).map_err(|_| UNREADABLE)
+    protected(&base64(text).ok_or_else(unreadable)?, true).map_err(|_| unreadable())
 }
 fn base64(text: &str) -> Option<Vec<u8>> {
     // A zero length would make the API read up to a NUL terminator.
@@ -354,7 +389,7 @@ mod tests {
             r#"{"version":1,"dpapi":""}"#,
             "secret",
         ] {
-            assert_eq!(python_plaintext(envelope.as_bytes()), Err(UNREADABLE));
+            assert_eq!(python_plaintext(envelope.as_bytes()), Err(unreadable()));
         }
         assert_eq!(base64("c2VjcmV0").unwrap(), b"secret");
         assert_eq!(base64("!!"), None);

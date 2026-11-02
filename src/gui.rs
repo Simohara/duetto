@@ -44,7 +44,9 @@ fn txt_requires_password(pw: Option<&str>, flags: Option<&str>) -> bool {
 /// An authentication failure of a speaker whose TXT asks for a password gets
 /// the likely cause; the attempt itself is not blocked, as TXT may be stale.
 fn password_hint(message: &str, speakers: &[Speaker], involved: &[String]) -> bool {
-    (message.contains("验证失败") || message.contains("音响认证"))
+    let failed = tr!("验证失败", "failed authentication", "認証に失敗");
+    let stage = tr!("音响认证", "Speaker authentication", "スピーカー認証");
+    (message.contains(&failed) || message.contains(&stage))
         && speakers.iter().any(|s| {
             // A typed IP and a scanned IP:7000 name the same receiver.
             let target = super::host_port(&s.address).ok();
@@ -53,7 +55,8 @@ fn password_hint(message: &str, speakers: &[Speaker], involved: &[String]) -> bo
                     target.is_some()
                         && super::host_port(a).ok() == target
                         // A multistream failure names its speaker; only that one counts.
-                        && (!message.contains("验证失败") || message.contains(&format!("音响 {a} ")))
+                        && (!message.contains(&failed)
+                            || message.contains(&tr!("音响 {a} ", "Speaker {a} ", "スピーカー {a} ")))
                 })
         })
 }
@@ -64,15 +67,33 @@ fn needs_repair_confirm(pending: Option<&str>, host: &str, replace: bool, exists
 }
 fn pair_failure_text(error: &(dyn std::error::Error + 'static), had: bool) -> String {
     let text = match error.downcast_ref::<mpsc::RecvTimeoutError>() {
-        Some(mpsc::RecvTimeoutError::Timeout) => "90 秒内未提交 PIN，已取消配对。",
+        Some(mpsc::RecvTimeoutError::Timeout) => tr!(
+            "90 秒内未提交 PIN，已取消配对。",
+            "No PIN was entered within 90 seconds; pairing was cancelled.",
+            "90 秒以内に PIN が入力されなかったため、ペアリングを中止しました。"
+        ),
         // The PIN prompt was dropped by Stop.
-        Some(mpsc::RecvTimeoutError::Disconnected) => "已取消配对。",
-        None => "配对失败或超时，请检查 PIN 和音响访问设置。",
+        Some(mpsc::RecvTimeoutError::Disconnected) => {
+            tr!(
+                "已取消配对。",
+                "Pairing cancelled.",
+                "ペアリングを中止しました。"
+            )
+        }
+        None => tr!(
+            "配对失败或超时，请检查 PIN 和音响访问设置。",
+            "Pairing failed or timed out; check the PIN and the speaker's access settings.",
+            "ペアリングに失敗したか、タイムアウトしました。PIN とスピーカーのアクセス設定を確認してください。"
+        ),
     };
     if had {
-        format!("{text}旧凭据未更改。")
+        tr!(
+            "{text}旧凭据未更改。",
+            "{text} The old credentials are unchanged.",
+            "{text}以前の認証情報はそのままです。"
+        )
     } else {
-        text.into()
+        text
     }
 }
 enum Event {
@@ -124,12 +145,16 @@ fn stereo_pair_notice(
             .collect();
         let volume = |s: &Speaker| routes.get(&s.address).map(|r| r.volume);
         match chosen.as_slice() {
-            [one] => notes.push(format!(
+            [one] => notes.push(tr!(
                 "「{}」属于家庭 App 立体声对，只连一台时另一台不会发声：请两台都勾选，并分别设为左、右声道。",
+                "“{}” is part of a Home app stereo pair, and its partner stays silent if only one is connected: tick both and set them to left and right.",
+                "「{}」はホーム App のステレオペアの一部です。片方だけ接続すると、もう片方は鳴りません。両方にチェックを入れ、それぞれ左と右に設定してください。",
                 one.name
             )),
-            [a, b] if volume(a) != volume(b) => notes.push(format!(
+            [a, b] if volume(a) != volume(b) => notes.push(tr!(
                 "「{}」与「{}」是同一个立体声对，独立音量不同；立体声对可能联动音量，建议设为相同，用「电平修正」平衡。",
+                "“{}” and “{}” are one stereo pair but have different speaker volumes. A pair may link its volumes, so set them the same and balance with Trim.",
+                "「{}」と「{}」は同じステレオペアですが、スピーカー音量が異なります。ペアでは音量が連動することがあるため、同じ値にそろえ、「レベル補正」でバランスを取ってください。",
                 a.name, b.name
             )),
             _ => {}
@@ -150,7 +175,7 @@ fn manual_test_gain(master_volume: u32, test_volume: u32) -> f32 {
 /// Estimated playback level relative to full scale, as the speaker row shows it.
 fn level_text(volume: u32, trim: f64, master: u32) -> String {
     if master == 0 || volume == 0 {
-        return "静音".into();
+        return tr!("静音", "Muted", "ミュート");
     }
     let db = -30.0 + volume as f64 * 0.3 + trim + 20.0 * (master as f64 / 100.0).log10();
     let sign = if db > 0.0 {
@@ -280,6 +305,9 @@ enum Command {
     SetTheme {
         theme: String,
     },
+    SetLanguage {
+        language: String,
+    },
     Route {
         address: String,
         selected: Option<bool>,
@@ -356,6 +384,8 @@ struct App {
     buffer_ms: u32,
     /// "light", "dark" or "system".
     theme: String,
+    /// "zh", "en", "ja" or "system".
+    language: String,
     /// Last measurement: right minus left arrival (ms) and level (dB).
     last_result: Option<(f64, f64)>,
     measuring_since: Option<Instant>,
@@ -389,7 +419,8 @@ impl App {
             measuring: false,
             reconnect: false,
             cpu_label: cpu_compatibility_label(),
-            webview_label: wry::webview_version().unwrap_or_else(|_| "未知版本".into()),
+            webview_label: wry::webview_version()
+                .unwrap_or_else(|_| tr!("未知版本", "unknown version", "不明なバージョン")),
             microphones: Vec::new(),
             mic_selected: 0,
             test_volume: 100,
@@ -397,7 +428,7 @@ impl App {
             test_mode: Arc::new(AtomicU32::new(0)),
             session_routes: Vec::new(),
             transition: None,
-            status: "选择音响及声道，桥接使用同一个 CABLE Output。".into(),
+            status: String::new(),
             stop: Arc::new(AtomicBool::new(false)),
             volume_ui: 100,
             start_notice: String::new(),
@@ -406,6 +437,7 @@ impl App {
             connected_at: None,
             buffer_ms: 2000,
             theme: "system".into(),
+            language: "system".into(),
             last_result: None,
             measuring_since: None,
             saved_json: String::new(),
@@ -415,10 +447,18 @@ impl App {
         };
         app.refresh_inputs();
         app.refresh_mics();
+        crate::i18n::set(&app.language);
         match crate::settings::load() {
             Ok(Some(settings)) => app.apply_settings(&settings),
             Ok(None) => {}
             Err((error, blocked)) => app.settings_load_failed(&error, blocked),
+        }
+        if app.status.is_empty() {
+            app.status = tr!(
+                "选择音响及声道，桥接使用同一个 CABLE Output。",
+                "Choose speakers and channels; they all stream from the same CABLE Output.",
+                "スピーカーとチャンネルを選んでください。すべて同じ CABLE Output から送信します。"
+            );
         }
         app.update_gains();
         app.saved_json = app.settings_json();
@@ -428,9 +468,17 @@ impl App {
         crate::diagnostics::record_error(&format!("设置文件无法读取：{error}"));
         self.save_blocked = blocked;
         self.status = if blocked {
-            "设置文件无法读取，本次不会保存设置。".into()
+            tr!(
+                "设置文件无法读取，本次不会保存设置。",
+                "The settings file cannot be read, so settings will not be saved this time.",
+                "設定ファイルを読み込めないため、今回は設定を保存しません。"
+            )
         } else {
-            "设置文件无法读取，已备份为 settings.json.bad 并使用默认设置。".into()
+            tr!(
+                "设置文件无法读取，已备份为 settings.json.bad 并使用默认设置。",
+                "The settings file cannot be read; it was set aside as settings.json.bad and the defaults are in use.",
+                "設定ファイルを読み込めないため、settings.json.bad として退避し、既定の設定を使っています。"
+            )
         };
     }
     fn apply_settings(&mut self, settings: &crate::settings::Settings) {
@@ -439,6 +487,8 @@ impl App {
         self.reconnect = settings.reconnect;
         self.buffer_ms = settings.buffer_ms;
         self.theme = settings.theme.clone();
+        self.language = settings.language.clone();
+        crate::i18n::set(&self.language);
         self.input_name = settings.input.clone();
         self.mic_name = settings.microphone.clone();
         if let Some(i) = self
@@ -585,7 +635,11 @@ impl App {
                 Ok(())
             })();
             if result.is_err() {
-                let _ = tx.send(Event::Message("扫描失败，请检查网络。".into()));
+                let _ = tx.send(Event::Message(tr!(
+                    "扫描失败，请检查网络。",
+                    "Scan failed; check the network.",
+                    "検索に失敗しました。ネットワークを確認してください。"
+                )));
             }
             let _ = tx.send(Event::ScanDone);
         });
@@ -596,7 +650,11 @@ impl App {
         }
         let mut host = self.host.trim().to_owned();
         if tone && super::host_port(&host).is_err() {
-            self.status = "测试音请先选择一台音响。".into();
+            self.status = tr!(
+                "测试音请先选择一台音响。",
+                "Choose a speaker for the test tone first.",
+                "テスト音を鳴らすスピーカーを先に選んでください。"
+            );
             return;
         }
         let input = if tone {
@@ -605,7 +663,11 @@ impl App {
             self.devices.get(self.selected).cloned()
         };
         if !tone && input.is_none() {
-            self.status = "未找到 CABLE Output，请先安装驱动并刷新。".into();
+            self.status = tr!(
+                "未找到 CABLE Output，请先安装驱动并刷新。",
+                "CABLE Output not found; install the driver, then refresh.",
+                "CABLE Output が見つかりません。ドライバーをインストールしてから更新してください。"
+            );
             return;
         }
         let mut routes: Vec<_> = self
@@ -620,7 +682,11 @@ impl App {
             .collect();
         if tone || routes.is_empty() {
             if super::host_port(&host).is_err() {
-                self.status = "请勾选音响或输入 IPv4 地址。".into();
+                self.status = tr!(
+                    "请勾选音响或输入 IPv4 地址。",
+                    "Tick a speaker or enter an IPv4 address.",
+                    "スピーカーにチェックを入れるか、IPv4 アドレスを入力してください。"
+                );
                 return;
             }
             // A typed IP and a scanned IP:7000 identify the same receiver.
@@ -639,7 +705,7 @@ impl App {
             let control = route.control.clone();
             if !self.speakers.iter().any(|s| s.address == host) {
                 self.speakers.push(Speaker {
-                    name: "手动添加".into(),
+                    name: tr!("手动添加", "Added manually", "手動で追加"),
                     address: host.clone(),
                     ..Default::default()
                 });
@@ -674,7 +740,11 @@ impl App {
         self.connected = false;
         self.measuring = false;
         self.transition = None;
-        self.status = "正在连接音响…".into();
+        self.status = tr!(
+            "正在连接音响…",
+            "Connecting to speakers…",
+            "スピーカーに接続しています…"
+        );
         let tx = self.events.clone();
         let stop = self.stop.clone();
         // Bridge playback uses the selected routes and does not require the
@@ -696,9 +766,11 @@ impl App {
                     stop.clone(),
                     volume,
                     Some(Box::new(move || {
-                        let _ = started.send(Event::Message(
-                            "协议发送已开始；实际发声需现场确认。".into(),
-                        ));
+                        let _ = started.send(Event::Message(tr!(
+                            "协议发送已开始；实际发声需现场确认。",
+                            "Sending has started; listen to confirm the speaker actually plays.",
+                            "送信を開始しました。実際に音が出ているかはその場で確認してください。"
+                        )));
                     })),
                     None,
                     Some(tone_gain),
@@ -752,8 +824,10 @@ impl App {
                     test_mode.store(0, Ordering::Release);
                     attempt += 1;
                     let seconds = (1u64 << attempt.min(5)).min(30);
-                    let _ = tx.send(Event::Reconnecting(format!(
-                        "连接中断，{seconds} 秒后重试（第 {attempt}/{MAX_RECONNECTS} 次）；可停止。"
+                    let _ = tx.send(Event::Reconnecting(tr!(
+                        "连接中断，{seconds} 秒后重试（第 {attempt}/{MAX_RECONNECTS} 次）；可停止。",
+                        "Connection lost; retrying in {seconds} s (attempt {attempt} of {MAX_RECONNECTS}). You can stop at any time.",
+                        "接続が切れました。{seconds} 秒後に再試行します（{attempt}/{MAX_RECONNECTS} 回目）。停止もできます。"
                     )));
                     for _ in 0..seconds * 10 {
                         if stop.load(Ordering::Acquire) {
@@ -767,9 +841,19 @@ impl App {
                 }
             };
             let message = match result {
-                Ok(()) => "已停止。".into(),
-                Err(e) if stop.load(Ordering::Acquire) && e.contains("取消") => "已停止。".into(),
-                Err(e) => format!("连接或播放失败：{}", e),
+                Ok(()) => tr!("已停止。", "Stopped.", "停止しました。"),
+                Err(e)
+                    if stop.load(Ordering::Acquire)
+                        && e.contains(&tr!("取消", "cancel", "中止")) =>
+                {
+                    tr!("已停止。", "Stopped.", "停止しました。")
+                }
+                Err(e) => tr!(
+                    "连接或播放失败：{}",
+                    "Connection or playback failed: {}",
+                    "接続または再生に失敗しました：{}",
+                    e
+                ),
             };
             let _ = tx.send(Event::WorkerDone(message));
         });
@@ -781,7 +865,11 @@ impl App {
         let mode = self.test_mode.load(Ordering::Acquire);
         if mode == 0 {
             if self.session_routes.len() != 2 {
-                self.status = "请选择恰好两台音响。".into();
+                self.status = tr!(
+                    "请选择恰好两台音响。",
+                    "Select exactly two speakers.",
+                    "スピーカーをちょうど 2 台選択してください。"
+                );
                 return;
             }
             let mut modes = self
@@ -791,7 +879,11 @@ impl App {
                 .collect::<Vec<_>>();
             modes.sort();
             if modes != [1, 2] {
-                self.status = "请将两台音响分别设置为左声道和右声道。".into();
+                self.status = tr!(
+                    "请将两台音响分别设置为左声道和右声道。",
+                    "Set one speaker to the left channel and the other to the right.",
+                    "2 台をそれぞれ左チャンネルと右チャンネルに設定してください。"
+                );
                 return;
             }
             let Some(reference) = self
@@ -804,7 +896,11 @@ impl App {
                 return;
             };
             if reference == 0 {
-                self.status = "两台音响的播放音量必须大于零。".into();
+                self.status = tr!(
+                    "两台音响的播放音量必须大于零。",
+                    "Both speakers need a volume above zero.",
+                    "2 台とも音量を 0 より大きくしてください。"
+                );
                 return;
             }
             for id in &self.session_routes {
@@ -818,7 +914,11 @@ impl App {
             // Only PCM changes: speaker hardware volume remains unchanged during measurement.
             self.test_mode.store(1, Ordering::Release);
             self.transition = Some((Instant::now() + Duration::from_secs(5), true));
-            self.status = "正在切换测试音，等待播放缓冲排空…".into();
+            self.status = tr!(
+                "正在切换测试音，等待播放缓冲排空…",
+                "Switching to the test tone; waiting for the playback buffer to drain…",
+                "テスト音に切り替えています。再生バッファが空になるのを待っています…"
+            );
         } else {
             // Apply user-selected playback levels only when leaving the test.
             for id in &self.session_routes {
@@ -827,7 +927,11 @@ impl App {
                 }
             }
             self.transition = Some((Instant::now() + Duration::from_secs(5), false));
-            self.status = "正在恢复播放音量，随后恢复应用声音…".into();
+            self.status = tr!(
+                "正在恢复播放音量，随后恢复应用声音…",
+                "Restoring the playback volume; app audio comes back next…",
+                "再生音量を戻しています。このあとアプリの音声に戻ります…"
+            );
             self.save_settings();
         }
     }
@@ -840,23 +944,37 @@ impl App {
             return;
         }
         if self.test_volume == 0 {
-            self.status = "测试音量为 0%，请先调高音量并等待播放稳定。".into();
+            self.status = tr!(
+                "测试音量为 0%，请先调高音量并等待播放稳定。",
+                "The test volume is 0%; raise it and wait for playback to settle.",
+                "テスト音量が 0% です。音量を上げ、再生が安定するまで待ってください。"
+            );
             return;
         }
         if self.volume_ui == 0 {
-            self.status = "总音量为 0%，请先调高音量并等待播放稳定。".into();
+            self.status = tr!(
+                "总音量为 0%，请先调高音量并等待播放稳定。",
+                "The master volume is 0%; raise it and wait for playback to settle.",
+                "マスター音量が 0% です。音量を上げ、再生が安定するまで待ってください。"
+            );
             return;
         }
         let settled = self.connected_at.map_or(Duration::ZERO, |at| at.elapsed());
         if settled < SETTLE_AFTER_CONNECT {
-            self.status = format!(
+            self.status = tr!(
                 "刚连接，两台音响的同步还在稳定，请 {} 秒后再测量。",
+                "Just connected; the two speakers are still settling into sync. Measure in {} s.",
+                "接続した直後で、2 台の同期がまだ安定していません。{} 秒後に測定してください。",
                 (SETTLE_AFTER_CONNECT - settled).as_secs() + 1
             );
             return;
         }
         let Some(mic) = self.microphones.get(self.mic_selected).cloned() else {
-            self.status = "请选择物理麦克风。".into();
+            self.status = tr!(
+                "请选择物理麦克风。",
+                "Choose a physical microphone.",
+                "物理マイクを選択してください。"
+            );
             return;
         };
         let left = self
@@ -870,19 +988,31 @@ impl App {
             .find(|id| self.routes.get(*id).is_some_and(|r| r.mode == 2))
             .cloned();
         let (Some(left), Some(right)) = (left, right) else {
-            self.status = "请指定左、右音响。".into();
+            self.status = tr!(
+                "请指定左、右音响。",
+                "Assign a left and a right speaker.",
+                "左右のスピーカーを指定してください。"
+            );
             return;
         };
         let a = &self.routes[&left];
         let b = &self.routes[&right];
         let (dl, dr, tl, tr) = (a.delay, b.delay, a.trim, b.trim);
         if a.volume == 0 || b.volume == 0 {
-            self.status = "自动音量调平需要两台音响的播放音量都大于零。".into();
+            self.status = tr!(
+                "自动音量调平需要两台音响的播放音量都大于零。",
+                "Automatic level matching needs both speakers' volumes above zero.",
+                "自動レベル調整には、2 台とも音量を 0 より大きくする必要があります。"
+            );
             return;
         }
         self.measuring = true;
         self.measuring_since = Some(Instant::now());
-        self.status = "正在测量延迟和音量，约需 20 秒，请保持安静。".into();
+        self.status = tr!(
+            "正在测量延迟和音量，约需 20 秒，请保持安静。",
+            "Measuring delay and level; this takes about 20 seconds. Please keep quiet.",
+            "遅延と音量を測定しています。約 20 秒かかります。静かにしてお待ちください。"
+        );
         let tx = self.events.clone();
         let stop = self.stop.clone();
         let mode = self.test_mode.clone();
@@ -898,21 +1028,31 @@ impl App {
         }
         let host = self.host.trim().to_owned();
         if super::host_port(&host).is_err() {
-            self.status = "请选择音响或输入 IPv4 地址。".into();
+            self.status = tr!(
+                "请选择音响或输入 IPv4 地址。",
+                "Choose a speaker or enter an IPv4 address.",
+                "スピーカーを選ぶか、IPv4 アドレスを入力してください。"
+            );
             return;
         }
         let had = super::vault::exists(&host);
         if needs_repair_confirm(self.repair_confirm.as_deref(), &host, replace, had) {
             self.repair_confirm = Some(host);
-            self.status =
-                "这台音响已有配对凭据。重新配对成功后才替换旧凭据；失败、超时或取消都保留旧凭据。"
-                    .into();
+            self.status = tr!(
+                "这台音响已有配对凭据。重新配对成功后才替换旧凭据；失败、超时或取消都保留旧凭据。",
+                "This speaker is already paired. The old credentials are replaced only once re-pairing succeeds; if it fails, times out or is cancelled, they are kept.",
+                "このスピーカーはペアリング済みです。再ペアリングが成功したときだけ認証情報を置き換え、失敗・タイムアウト・中止の場合は以前の認証情報を残します。"
+            );
             return;
         }
         self.repair_confirm = None;
         self.busy = true;
         self.activity = "pairing";
-        self.status = "正在请求音响显示 PIN…".into();
+        self.status = tr!(
+            "正在请求音响显示 PIN…",
+            "Asking the speaker to show a PIN…",
+            "スピーカーに PIN の表示を求めています…"
+        );
         let tx = self.events.clone();
         thread::spawn(move || {
             let work = (|| -> Result<(), Box<dyn std::error::Error>> {
@@ -928,8 +1068,16 @@ impl App {
                 Ok(())
             })();
             let msg = match work {
-                Ok(()) if had => "重新配对完成，已替换旧凭据。".to_owned(),
-                Ok(()) => "配对完成，凭据已使用 Windows 当前用户加密保存。".to_owned(),
+                Ok(()) if had => tr!(
+                    "重新配对完成，已替换旧凭据。",
+                    "Re-paired; the old credentials were replaced.",
+                    "再ペアリングが完了し、認証情報を置き換えました。"
+                ),
+                Ok(()) => tr!(
+                    "配对完成，凭据已使用 Windows 当前用户加密保存。",
+                    "Paired. The credentials are saved, encrypted for the current Windows user.",
+                    "ペアリングが完了しました。認証情報は現在の Windows ユーザーで暗号化して保存しました。"
+                ),
                 Err(error) => pair_failure_text(error.as_ref(), had),
             };
             let _ = tx.send(Event::WorkerDone(msg));
@@ -943,15 +1091,29 @@ impl App {
             .filter_map(|s| Some((s.address.clone(), s.id.clone()?)))
             .collect();
         if rows.is_empty() {
-            self.status = "请先扫描音响：导入旧版凭据需要音响的设备标识。".into();
+            self.status = tr!(
+                "请先扫描音响：导入旧版凭据需要音响的设备标识。",
+                "Scan for speakers first: importing old credentials needs each speaker's device ID.",
+                "先にスピーカーを検索してください。旧バージョンの認証情報を取り込むにはデバイス ID が必要です。"
+            );
             return;
         }
         self.status = match super::vault::import_python(&rows) {
-            Ok((0, 0)) => "旧版凭据中没有与已扫描音响对应的配对凭据。".into(),
-            Ok((imported, skipped)) => format!(
-                "已导入 {imported} 台音响的旧版配对凭据，跳过 {skipped} 台（已有凭据或旧凭据不可用）。"
+            Ok((0, 0)) => tr!(
+                "旧版凭据中没有与已扫描音响对应的配对凭据。",
+                "The old credentials include none for the scanned speakers.",
+                "旧バージョンの認証情報に、検索したスピーカーのものはありません。"
             ),
-            Err(error) => format!("{error}，未导入。"),
+            Ok((imported, skipped)) => tr!(
+                "已导入 {imported} 台音响的旧版配对凭据，跳过 {skipped} 台（已有凭据或旧凭据不可用）。",
+                "Old credentials: {imported} imported, {skipped} skipped (already paired, or the old credential is unusable).",
+                "旧バージョンの認証情報を {imported} 台分取り込み、{skipped} 台はスキップしました（ペアリング済み、または以前の認証情報が使えません）。"
+            ),
+            Err(error) => tr!(
+                "{error}，未导入。",
+                "{error}; nothing was imported.",
+                "{error}。取り込みは行っていません。"
+            ),
         };
     }
     fn set_host(&mut self, host: String) {
@@ -996,8 +1158,18 @@ impl App {
         crate::diagnostics::record_error(&format!("设置保存失败：{error}"));
         // elapsed() of a future instant is zero, so autosave waits 29 + 1 s.
         self.dirty_since = Some(Instant::now() + Duration::from_secs(29));
-        if !self.status.contains("设置保存失败") {
-            self.status = format!("{} 设置保存失败：{error}", self.status);
+        let note = tr!(
+            "设置保存失败",
+            "Settings could not be saved",
+            "設定を保存できませんでした"
+        );
+        if !self.status.contains(&note) {
+            self.status = tr!(
+                "{} {note}：{error}",
+                "{} {note}: {error}",
+                "{} {note}：{error}",
+                self.status
+            );
         }
     }
     fn settings_json(&self) -> String {
@@ -1030,6 +1202,7 @@ impl App {
             reconnect: self.reconnect,
             buffer_ms: self.buffer_ms,
             theme: self.theme.clone(),
+            language: self.language.clone(),
             routes: Default::default(),
             pairs: true,
         };
@@ -1098,9 +1271,12 @@ impl App {
                     .position(|v| v.id.as_deref() == Some(id.as_str()))
             {
                 if self.busy {
-                    self.status = format!(
+                    self.status = tr!(
                         "「{}」的地址已变为 {}，停止播放后重新扫描以更新。",
-                        s.name, s.address
+                        "“{}” has moved to {}; stop playback and scan again to update it.",
+                        "「{}」のアドレスが {} に変わりました。再生を停止してから再度検索すると更新されます。",
+                        s.name,
+                        s.address
                     );
                     return;
                 }
@@ -1155,7 +1331,11 @@ impl App {
                     self.set_host(kept.clone());
                 }
             } else {
-                self.status = format!("「{name}」在 {kept} 和 {dupe} 各有一行设置，请只勾选一行。");
+                self.status = tr!(
+                    "「{name}」在 {kept} 和 {dupe} 各有一行设置，请只勾选一行。",
+                    "“{name}” has settings under both {kept} and {dupe}; tick only one of them.",
+                    "「{name}」には {kept} と {dupe} の 2 行の設定があります。どちらか一方だけにチェックを入れてください。"
+                );
             }
         }
     }
@@ -1194,9 +1374,19 @@ impl App {
             crate::vault::swap(from, to)
         };
         match swapped {
-            Ok(()) => self.status = format!("音响地址已从 {from} 更新为 {to}，设置与配对已保留。"),
+            Ok(()) => {
+                self.status = tr!(
+                    "音响地址已从 {from} 更新为 {to}，设置与配对已保留。",
+                    "Speaker address updated from {from} to {to}; settings and pairing were kept.",
+                    "スピーカーのアドレスを {from} から {to} に更新しました。設定とペアリングはそのままです。"
+                )
+            }
             Err(error) => {
-                self.status = format!("音响地址已更新为 {to}，但配对凭据未能迁移：{error}")
+                self.status = tr!(
+                    "音响地址已更新为 {to}，但配对凭据未能迁移：{error}",
+                    "Speaker address updated to {to}, but the pairing credentials could not be moved: {error}",
+                    "スピーカーのアドレスを {to} に更新しましたが、認証情報を移せませんでした：{error}"
+                )
             }
         }
         self.save_settings();
@@ -1286,8 +1476,10 @@ impl App {
             route.partner = Some(partner.into());
             route.selected = on;
         }
-        self.status = format!(
+        self.status = tr!(
             "「{}」与「{}」已组成立体声对：左、右声道。",
+            "“{}” and “{}” are now a stereo pair: left and right.",
+            "「{}」と「{}」をステレオペア（左・右）にしました。",
             self.name_of(left),
             self.name_of(right)
         );
@@ -1300,7 +1492,11 @@ impl App {
         let (a, b) = (self.routes[address].mode, self.routes[&partner].mode);
         self.routes.get_mut(address).unwrap().set_mode(b);
         self.routes.get_mut(&partner).unwrap().set_mode(a);
-        self.status = "已互换左右声道。".into();
+        self.status = tr!(
+            "已互换左右声道。",
+            "Left and right swapped.",
+            "左右を入れ替えました。"
+        );
     }
     /// Stereo and mono end a pair; left or right keep it, with the partner
     /// moved to the other side.
@@ -1347,7 +1543,11 @@ impl App {
                 let _ = std::process::Command::new("explorer.exe")
                     .arg("https://vb-audio.com/Cable/")
                     .spawn();
-                self.status = "已在浏览器打开 VB-CABLE 官方下载页；安装后点击「刷新」。".into();
+                self.status = tr!(
+                    "已在浏览器打开 VB-CABLE 官方下载页；安装后点击「刷新」。",
+                    "Opened the VB-CABLE download page in your browser; after installing, click Refresh.",
+                    "VB-CABLE の公式ダウンロードページをブラウザーで開きました。インストール後に「更新」をクリックしてください。"
+                );
             }
             // Read-only, so also allowed while busy.
             Command::ExportDiagnostics => self.export_diagnostics(),
@@ -1356,7 +1556,7 @@ impl App {
                     let address = format!("{ip}:{port}");
                     if !self.speakers.iter().any(|s| s.address == address) {
                         self.speakers.push(Speaker {
-                            name: "手动添加".into(),
+                            name: tr!("手动添加", "Added manually", "手動で追加"),
                             address: address.clone(),
                             ..Default::default()
                         });
@@ -1366,7 +1566,13 @@ impl App {
                     }
                     self.host = address;
                 }
-                Err(_) => self.status = "请输入有效的 IPv4 地址。".into(),
+                Err(_) => {
+                    self.status = tr!(
+                        "请输入有效的 IPv4 地址。",
+                        "Enter a valid IPv4 address.",
+                        "有効な IPv4 アドレスを入力してください。"
+                    )
+                }
             },
             Command::Start => self.start(false),
             Command::Tone => self.start(true),
@@ -1378,7 +1584,11 @@ impl App {
             Command::PairDevice { replace } => self.pair_device(replace),
             Command::CancelPair => {
                 if self.repair_confirm.take().is_some() {
-                    self.status = "已取消重新配对，旧凭据未更改。".into();
+                    self.status = tr!(
+                        "已取消重新配对，旧凭据未更改。",
+                        "Re-pairing cancelled; the old credentials are unchanged.",
+                        "再ペアリングを中止しました。以前の認証情報はそのままです。"
+                    );
                 }
             }
             Command::ImportLegacyCredentials if !self.busy => self.import_legacy(),
@@ -1403,7 +1613,11 @@ impl App {
                 self.update_gains();
                 if self.test_mode.load(Ordering::Acquire) == 1 {
                     self.transition = Some((Instant::now() + Duration::from_secs(5), true));
-                    self.status = "测试音量已更新，等待播放缓冲；稳定后可测量。".into();
+                    self.status = tr!(
+                        "测试音量已更新，等待播放缓冲；稳定后可测量。",
+                        "Test volume changed; waiting for the playback buffer. You can measure once it settles.",
+                        "テスト音量を変更しました。再生バッファを待っています。安定したら測定できます。"
+                    );
                 }
             }
             Command::SetBuffer { value } if !self.busy => {
@@ -1414,6 +1628,17 @@ impl App {
                 if matches!(theme.as_str(), "light" | "dark" | "system") =>
             {
                 self.theme = theme
+            }
+            Command::SetLanguage { language }
+                if matches!(language.as_str(), "zh" | "en" | "ja" | "system") =>
+            {
+                crate::i18n::set(&language);
+                self.language = language;
+                self.status = tr!(
+                    "界面语言已切换为中文。",
+                    "The interface is now in English.",
+                    "表示言語を日本語に切り替えました。"
+                );
             }
             Command::Route {
                 address,
@@ -1461,7 +1686,11 @@ impl App {
             Command::MakePair { left, right } if editable => self.make_pair(&left, &right),
             Command::Unpair { address } if editable => {
                 self.unpair(&address);
-                self.status = "已拆分立体声对，两台恢复为立体声。".into();
+                self.status = tr!(
+                    "已拆分立体声对，两台恢复为立体声。",
+                    "Stereo pair split; both speakers are back to stereo.",
+                    "ステレオペアを解除し、2 台ともステレオに戻しました。"
+                );
             }
             Command::SwapPair { address } if editable => self.swap_pair(&address),
             Command::SetTarget { address } if self.routes.contains_key(&address) => {
@@ -1474,7 +1703,11 @@ impl App {
                         let _ = sender.send(pin);
                     }
                 } else {
-                    self.status = "PIN 必须为四位数字。".into();
+                    self.status = tr!(
+                        "PIN 必须为四位数字。",
+                        "The PIN must be four digits.",
+                        "PIN は 4 桁の数字で入力してください。"
+                    );
                 }
             }
             _ => {}
@@ -1489,7 +1722,11 @@ impl App {
                 Event::ScanDone => self.scanning = false,
                 Event::PairPin(tx) => {
                     self.pin_sender = Some(tx);
-                    self.status = "请在下方输入音响显示的 PIN。".into();
+                    self.status = tr!(
+                        "请在下方输入音响显示的 PIN。",
+                        "Enter the PIN shown on the speaker below.",
+                        "スピーカーに表示された PIN を下に入力してください。"
+                    );
                 }
                 Event::Message(s) => self.status = s,
                 Event::Connected(s) => {
@@ -1529,8 +1766,10 @@ impl App {
                         self.session_routes.clone()
                     };
                     self.status = if password_hint(&s, &self.speakers, &involved) {
-                        format!(
-                            "{s} 此音响开启了连接密码，当前版本暂不支持；可在家庭 App 调整访问设置。"
+                        tr!(
+                            "{s} 此音响开启了连接密码，当前版本暂不支持；可在家庭 App 调整访问设置。",
+                            "{s} This speaker requires a connection password, which this version does not support yet; you can change its access settings in the Home app.",
+                            "{s} このスピーカーには接続パスワードが設定されていますが、このバージョンはまだ対応していません。ホーム App でアクセス設定を変更できます。"
                         )
                     } else {
                         s
@@ -1558,8 +1797,10 @@ impl App {
                                         .store((trim as f32).to_bits(), Ordering::Release);
                                 }
                             }
-                            self.status = format!(
-                                "测得右侧比左侧晚 {ms:+.2} ms、响 {db:+.1} dB；已立即应用：延迟左 {dl:.1}、右 {dr:.1} ms，电平修正左 {tl:+.1}、右 {tr:+.1} dB。"
+                            self.status = tr!(
+                                "测得右侧比左侧晚 {ms:+.2} ms、响 {db:+.1} dB；已立即应用：延迟左 {dl:.1}、右 {dr:.1} ms，电平修正左 {tl:+.1}、右 {tr:+.1} dB。",
+                                "Measured right vs. left: {ms:+.2} ms in arrival, {db:+.1} dB in level. Applied right away: delay L {dl:.1} / R {dr:.1} ms, trim L {tl:+.1} / R {tr:+.1} dB.",
+                                "測定結果：左に対する右の差は、到達 {ms:+.2} ms、音量 {db:+.1} dB です。すぐに適用しました：遅延 左 {dl:.1}・右 {dr:.1} ms、レベル補正 左 {tl:+.1}・右 {tr:+.1} dB。"
                             );
                             // New delays and trims reach the speakers after the
                             // send queue and receiver buffer; re-measure after that.
@@ -1567,7 +1808,13 @@ impl App {
                             self.transition = Some((Instant::now() + Duration::from_secs(5), true));
                             self.save_settings();
                         }
-                        Err(error) => self.status = format!("测量失败：{error}。未应用结果。"),
+                        Err(error) => {
+                            self.status = tr!(
+                                "测量失败：{error}。未应用结果。",
+                                "Measurement failed: {error}. Nothing was applied.",
+                                "測定に失敗しました：{error}。結果は適用していません。"
+                            )
+                        }
                     }
                 }
             }
@@ -1575,8 +1822,10 @@ impl App {
         for host in crate::event_pump::take_volume_changes() {
             // Warn only: re-applying would fight a level the listener just chose.
             if self.busy {
-                self.status = format!(
+                self.status = tr!(
                     "「{}」的音量在外部被修改（触控、Siri 或家庭 App），左右平衡可能已改变，建议重新校准。",
+                    "The volume of “{}” was changed elsewhere (touch, Siri or the Home app); the left/right balance may have shifted, so recalibrate.",
+                    "「{}」の音量が外部（タッチ操作、Siri、ホーム App）で変更されました。左右のバランスが変わった可能性があるため、キャリブレーションをやり直してください。",
                     self.name_of(&host)
                 );
             }
@@ -1589,12 +1838,24 @@ impl App {
             let (_, starting) = self.transition.take().unwrap();
             if starting && self.measured {
                 self.measured = false;
-                self.status.push_str(" 已稳定，可再次测量验证。");
+                self.status.push_str(&tr!(
+                    " 已稳定，可再次测量验证。",
+                    " Settled; measure again to verify.",
+                    " 安定しました。もう一度測定して確認できます。"
+                ));
             } else if starting {
-                self.status = "连续测试音已开启；两台使用相同测试电平。".into();
+                self.status = tr!(
+                    "连续测试音已开启；两台使用相同测试电平。",
+                    "Continuous test tone on; both speakers play it at the same level.",
+                    "連続テスト音を開始しました。2 台とも同じテストレベルです。"
+                );
             } else {
                 self.test_mode.store(0, Ordering::Release);
-                self.status = "连续测试已结束，恢复应用声音。".into();
+                self.status = tr!(
+                    "连续测试已结束，恢复应用声音。",
+                    "Continuous test ended; app audio is back.",
+                    "連続テストを終了し、アプリの音声に戻しました。"
+                );
             }
         }
         self.autosave();
@@ -1606,13 +1867,26 @@ impl App {
         if let Some((until, starting)) = self.transition {
             let remaining = until.saturating_duration_since(Instant::now());
             let what = if starting {
-                "等待播放缓冲排空"
+                tr!(
+                    "等待播放缓冲排空",
+                    "Waiting for the playback buffer to drain",
+                    "再生バッファが空になるのを待っています"
+                )
             } else {
-                "正在恢复播放音量"
+                tr!(
+                    "正在恢复播放音量",
+                    "Restoring the playback volume",
+                    "再生音量を戻しています"
+                )
             };
             return Some((
                 1.0 - remaining.as_secs_f32() / 5.0,
-                format!("{what} · 剩 {} 秒", left(remaining)),
+                tr!(
+                    "{what} · 剩 {} 秒",
+                    "{what} · {} s left",
+                    "{what}・残り {} 秒",
+                    left(remaining)
+                ),
             ));
         }
         if self.measuring {
@@ -1622,7 +1896,12 @@ impl App {
             let remaining = MEASURE_TIME.saturating_sub(elapsed);
             return Some((
                 (elapsed.as_secs_f32() / MEASURE_TIME.as_secs_f32()).min(0.97),
-                format!("正在测量延迟和音量，请保持安静 · 约 {} 秒", left(remaining)),
+                tr!(
+                    "正在测量延迟和音量，请保持安静 · 约 {} 秒",
+                    "Measuring delay and level, please keep quiet · about {} s",
+                    "遅延と音量を測定中です。静かにしてください・約 {} 秒",
+                    left(remaining)
+                ),
             ));
         }
         let settled = self
@@ -1634,8 +1913,10 @@ impl App {
             .then(|| {
                 (
                     settled.as_secs_f32() / SETTLE_AFTER_CONNECT.as_secs_f32(),
-                    format!(
+                    tr!(
                         "同步稳定中 · 剩 {} 秒",
+                        "Settling sync · {} s left",
+                        "同期の安定待ち・残り {} 秒",
                         left(SETTLE_AFTER_CONNECT - settled)
                     ),
                 )
@@ -1697,6 +1978,8 @@ impl App {
             "bufferMs": self.buffer_ms,
             "reconnect": self.reconnect,
             "theme": self.theme,
+            "language": self.language,
+            "lang": crate::i18n::code(crate::i18n::lang()),
             "devices": self.devices,
             "device": self.selected,
             "mics": self.microphones,
@@ -1760,7 +2043,11 @@ impl App {
             "mics": self.microphones,
             "settings": settings,
             "speakers": speakers,
-            "note": "包含音响名称、IP 地址和输入设备名称；不包含配对凭据、PIN、密码或音频内容。",
+            "note": tr!(
+                "包含音响名称、IP 地址和输入设备名称；不包含配对凭据、PIN、密码或音频内容。",
+                "Contains speaker names, IP addresses and input device names; no pairing credentials, PINs, passwords or audio.",
+                "スピーカー名、IP アドレス、入力デバイス名を含みます。認証情報、PIN、パスワード、音声は含みません。"
+            ),
         }))
         .unwrap_or_default()
     }
@@ -1777,9 +2064,20 @@ impl App {
                 let _ = std::process::Command::new("explorer.exe")
                     .raw_arg(format!("/select,\"{}\"", path.display()))
                     .spawn();
-                self.status = format!("诊断已导出：{}", path.display());
+                self.status = tr!(
+                    "诊断已导出：{}",
+                    "Diagnostics exported: {}",
+                    "診断情報を書き出しました：{}",
+                    path.display()
+                );
             }
-            Err(error) => self.status = format!("诊断导出失败：{error}"),
+            Err(error) => {
+                self.status = tr!(
+                    "诊断导出失败：{error}",
+                    "Diagnostics export failed: {error}",
+                    "診断情報を書き出せませんでした：{error}"
+                )
+            }
         }
     }
     /// The snapshot, only when it differs from the last one sent.
@@ -1824,7 +2122,7 @@ fn cpu_compatibility_label() -> String {
     }
     #[cfg(not(target_arch = "x86_64"))]
     {
-        "非 x86-64".to_owned()
+        tr!("非 x86-64", "not x86-64", "x86-64 以外")
     }
 }
 
@@ -1852,6 +2150,10 @@ fn asset(path: &str) -> Option<(&'static [u8], &'static str)> {
             &include_bytes!("../web/app.js")[..],
             "text/javascript; charset=utf-8",
         ),
+        "/i18n.js" => (
+            &include_bytes!("../web/i18n.js")[..],
+            "text/javascript; charset=utf-8",
+        ),
         "/vendor/gsap.min.js" => (
             &include_bytes!("../web/vendor/gsap.min.js")[..],
             "text/javascript",
@@ -1862,10 +2164,6 @@ fn asset(path: &str) -> Option<(&'static [u8], &'static str)> {
         ),
         "/vendor/SplitText.min.js" => (
             &include_bytes!("../web/vendor/SplitText.min.js")[..],
-            "text/javascript",
-        ),
-        "/vendor/MotionPathPlugin.min.js" => (
-            &include_bytes!("../web/vendor/MotionPathPlugin.min.js")[..],
             "text/javascript",
         ),
         "/vendor/DrawSVGPlugin.min.js" => (
@@ -1923,9 +2221,13 @@ fn instance_lock(path: &std::path::Path) -> std::io::Result<std::fs::File> {
         .open(path)
 }
 
+fn app_name() -> String {
+    tr!("合鸣 Duetto", "Duetto", "Duetto")
+}
+
 fn show_message(text: &str) {
     let text: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
-    let title: Vec<u16> = "合鸣 Duetto".encode_utf16().chain(Some(0)).collect();
+    let title: Vec<u16> = app_name().encode_utf16().chain(Some(0)).collect();
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONINFORMATION, MB_OK, MessageBoxW};
         MessageBoxW(
@@ -1944,6 +2246,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         event_loop::{ControlFlow, EventLoopBuilder},
         window::WindowBuilder,
     };
+    // The saved language is read with the settings, after the instance check.
+    crate::i18n::set("system");
     let data = std::env::var_os("LOCALAPPDATA")
         .map(|base| std::path::PathBuf::from(base).join("AirBridge-Rust"));
     // Two instances would overwrite each other's settings and drive the same speakers.
@@ -1952,7 +2256,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let _ = std::fs::create_dir_all(dir);
             match instance_lock(&dir.join("instance.lock")) {
                 Err(e) if e.raw_os_error() == Some(32) => {
-                    show_message("合鸣 Duetto 已在运行，请切换到已打开的窗口。");
+                    show_message(&tr!(
+                        "合鸣 Duetto 已在运行，请切换到已打开的窗口。",
+                        "Duetto is already running; switch to its open window.",
+                        "Duetto はすでに起動しています。開いているウィンドウに切り替えてください。"
+                    ));
                     return Err("合鸣 Duetto 已在运行".into());
                 }
                 // Any other failure (e.g. a read-only folder) must not block the app.
@@ -1965,7 +2273,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = EventLoopBuilder::<String>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     let window = WindowBuilder::new()
-        .with_title("合鸣 Duetto")
+        .with_title(app_name())
         .with_inner_size(LogicalSize::new(1180.0, 800.0))
         .with_min_inner_size(LogicalSize::new(960.0, 640.0))
         .with_window_icon(app_icon())
@@ -1984,8 +2292,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .with_navigation_handler(|url| allowed_url(&url))
         .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
         .with_initialization_script(format!(
-            "document.documentElement.dataset.theme = {};",
-            json!(if dark { "dark" } else { "light" })
+            "document.documentElement.dataset.theme = {}; document.documentElement.lang = {};",
+            json!(if dark { "dark" } else { "light" }),
+            json!(crate::i18n::code(crate::i18n::lang()))
         ))
         .with_background_color(if dark {
             (11, 13, 16, 255)
@@ -2004,10 +2313,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(100));
         match event {
             WindowLoopEvent::UserEvent(body) => {
-                let theme = app.theme.clone();
+                let (theme, language) = (app.theme.clone(), app.language.clone());
                 app.command(&body);
                 if app.theme != theme {
                     window.set_theme(window_theme(&app.theme));
+                }
+                if app.language != language {
+                    window.set_title(&app_name());
                 }
             }
             WindowLoopEvent::WindowEvent {
@@ -2084,6 +2396,7 @@ mod tests {
             connected_at: None,
             buffer_ms: 2000,
             theme: "system".into(),
+            language: "system".into(),
             last_result: None,
             measuring_since: None,
             saved_json: String::new(),
@@ -2676,6 +2989,12 @@ mod tests {
         assert_eq!(app.theme, "system");
         app.command(r#"{"cmd":"setTheme","theme":"dark"}"#);
         assert_eq!(app.theme, "dark");
+        app.command(r#"{"cmd":"setLanguage","language":"fr"}"#);
+        assert_eq!(app.language, "system");
+        // Chinese is also the default every other test expects.
+        app.command(r#"{"cmd":"setLanguage","language":"zh"}"#);
+        assert_eq!(app.language, "zh");
+        assert_eq!(app.settings_snapshot().language, "zh");
         app.command(r#"{"cmd":"setBuffer","value":1234}"#);
         assert_eq!(app.buffer_ms, 1250);
         app.command(r#"{"cmd":"submitPin","pin":"12a4"}"#);
