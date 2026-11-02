@@ -183,13 +183,13 @@ impl ControlPump {
         while let Some(response) = self.connection.next_response_unordered()? {
             // Unknown/late replies are consumed, never assigned to the latest
             // request. In particular, old feedback cannot acknowledge volume.
-            if let Some(cseq) = response.sequence() {
-                if self.pending.remove(&cseq).is_some() {
-                    completions.push(Completion {
-                        cseq,
-                        result: Ok(response),
-                    });
-                }
+            if let Some(cseq) = response.sequence()
+                && self.pending.remove(&cseq).is_some()
+            {
+                completions.push(Completion {
+                    cseq,
+                    result: Ok(response),
+                });
             }
         }
         Ok(())
