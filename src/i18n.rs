@@ -49,6 +49,10 @@ fn resolve(setting: &str, system: u16) -> Lang {
 }
 
 fn system_language() -> u16 {
+    // Tests check Chinese messages whatever language the build machine runs.
+    if cfg!(test) {
+        return 0x0804;
+    }
     unsafe { windows_sys::Win32::Globalization::GetUserDefaultUILanguage() }
 }
 
