@@ -1,0 +1,5 @@
+/target
+/target-*/
+/vendor/*/target/
+/.taste-skill/
+*.log
